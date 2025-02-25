@@ -13,4 +13,12 @@ resources:
   group: tekton.dev
   kind: PipelineRun
   version: v1
+- external: true
+  group: tekton.dev
+  kind: PipelineRun
+  path: github.com/tektoncd/pipeline/pkg/apis/pipeline/v1
+  version: v1
+  webhooks:
+    defaulting: true
+    webhookVersion: v1
 version: "3"

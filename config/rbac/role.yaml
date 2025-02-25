@@ -14,6 +14,13 @@ rules:
   - update
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - list
+  - watch
+- apiGroups:
   - kueue.x-k8s.io
   resources:
   - resourceflavors
@@ -61,6 +68,7 @@ rules:
   resources:
   - pipelineruns
   verbs:
+  - list
   - patch
   - update
   - watch

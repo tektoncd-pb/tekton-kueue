@@ -38,6 +38,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/konflux-ci/tekton-queue/internal/controller"
+	webhookv1 "github.com/konflux-ci/tekton-queue/internal/webhook/v1"
+
 	// +kubebuilder:scaffold:imports
 
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
@@ -214,6 +216,15 @@ func main() {
 	controller.SetupIndexer(ctx, mgr.GetFieldIndexer())
 	if err != nil {
 		setupLog.Error(err, "Failed to setup the indexer")
+		os.Exit(1)
+	}
+
+	err = webhookv1.SetupPipelineRunWebhookWithManager(
+		mgr,
+		&webhookv1.PipelineRunCustomDefaulter{KueueName: "pipelines-queue"},
+	)
+	if err != nil {
+		setupLog.Error(err, "Failed to setup the webhook")
 		os.Exit(1)
 	}
 
