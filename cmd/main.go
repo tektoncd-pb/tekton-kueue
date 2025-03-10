@@ -213,7 +213,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	controller.SetupIndexer(ctx, mgr.GetFieldIndexer())
+	err = controller.SetupIndexer(ctx, mgr.GetFieldIndexer())
 	if err != nil {
 		setupLog.Error(err, "Failed to setup the indexer")
 		os.Exit(1)
