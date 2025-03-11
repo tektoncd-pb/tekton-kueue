@@ -23,7 +23,7 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/konflux-infra-tenant/tekton-kueue-tenant/tekton-kueue/tekton-kueue:{{revision}}
+    value: quay.io/redhat-user-workloads/konflux-infra-tenant/tekton-kueue/tekton-kueue:{{revision}}
   - name: dockerfile
     value: Dockerfile
   - name: path-context
