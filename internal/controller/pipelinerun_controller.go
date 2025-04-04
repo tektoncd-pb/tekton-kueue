@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -43,6 +44,12 @@ const (
 
 const (
 	ControllerName = "KueuePipelineRunController"
+)
+
+const (
+	annotationDomain            = "kueue.konflux-ci.dev/"
+	annotationResourcesRequests = annotationDomain + "requests-"
+	defaultMemoryRequest        = "1Gi"
 )
 
 var (
@@ -117,7 +124,6 @@ func (p *PipelineRun) Finished() (message string, success bool, finished bool) {
 	finished = plr.IsDone()
 
 	return
-
 }
 
 // GVK implements jobframework.GenericJob.
@@ -142,6 +148,8 @@ func (p *PipelineRun) Object() client.Object {
 
 // PodSets implements jobframework.GenericJob.
 func (p *PipelineRun) PodSets() []kueue.PodSet {
+	requests := p.resourcesRequests()
+
 	return []kueue.PodSet{
 		{
 			Name: "pod-set-1",
@@ -152,9 +160,7 @@ func (p *PipelineRun) PodSets() []kueue.PodSet {
 							Name:  "dummy",
 							Image: "dummy",
 							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceMemory: resource.MustParse("1Gi"),
-								},
+								Requests: requests,
 							},
 						},
 					},
@@ -163,6 +169,34 @@ func (p *PipelineRun) PodSets() []kueue.PodSet {
 			Count: 1,
 		},
 	}
+}
+
+// resourcesRequests will match all annotations starting with
+// `kueue.konflux-ci.dev/requests-`. Valid annotations to set
+// the requested resources are then:
+// * `kueue.konflux-ci.dev/requests-cpu`
+// * `kueue.konflux-ci.dev/requests-memory`
+// * `kueue.konflux-ci.dev/requests-storage`
+// * `kueue.konflux-ci.dev/requests-ephemeral-storage`
+//
+// If no annotation is matched, this function will default
+// the memory requested to `1Gi`.
+//
+// WARNING: Annotations are not validated and a panic will
+// happen if they can not be parsed as `resource.Quantity`.
+func (p *PipelineRun) resourcesRequests() corev1.ResourceList {
+	requests := corev1.ResourceList{
+		corev1.ResourceMemory: resource.MustParse(defaultMemoryRequest),
+	}
+
+	for k, v := range p.GetAnnotations() {
+		if t := strings.TrimPrefix(k, annotationResourcesRequests); t != k {
+			// TODO(@filariow): how to properly validate this?
+			requests[corev1.ResourceName(t)] = resource.MustParse(v)
+		}
+	}
+
+	return requests
 }
 
 // PodsReady implements jobframework.GenericJob.
