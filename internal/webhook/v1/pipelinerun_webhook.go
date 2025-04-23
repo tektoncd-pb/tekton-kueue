@@ -67,6 +67,9 @@ func (d *PipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 
 	plr.Spec.Status = tekv1.PipelineRunSpecStatusPending
 	if d.KueueName != "" {
+		if plr.Labels == nil {
+			plr.Labels = make(map[string]string)
+		}
 		plr.Labels[QueueLabel] = d.KueueName
 	}
 

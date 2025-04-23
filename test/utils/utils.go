@@ -33,7 +33,6 @@ const (
 		"releases/download/%s/bundle.yaml"
 
 	certmanagerVersion = "v1.16.3"
-	certmanagerURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
 )
 
 func warnError(err error) {
@@ -106,8 +105,7 @@ func IsPrometheusCRDsInstalled() bool {
 
 // UninstallCertManager uninstalls the cert manager
 func UninstallCertManager() {
-	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
-	cmd := exec.Command("kubectl", "delete", "-f", url)
+	cmd := exec.Command("make", "cert-manager-undeploy", "-f", fmt.Sprintf("CERT_MANAGER_VERSION=%s", certmanagerVersion))
 	if _, err := Run(cmd); err != nil {
 		warnError(err)
 	}
@@ -115,8 +113,7 @@ func UninstallCertManager() {
 
 // InstallCertManager installs the cert manager bundle.
 func InstallCertManager() error {
-	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
-	cmd := exec.Command("kubectl", "apply", "-f", url)
+	cmd := exec.Command("make", "cert-manager", fmt.Sprintf("CERT_MANAGER_VERSION=%s", certmanagerVersion))
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
@@ -163,18 +160,6 @@ func IsCertManagerCRDsInstalled() bool {
 	}
 
 	return false
-}
-
-// LoadImageToKindClusterWithName loads a local docker image to the kind cluster
-func LoadImageToKindClusterWithName(name string) error {
-	cluster := "kind"
-	if v, ok := os.LookupEnv("KIND_CLUSTER"); ok {
-		cluster = v
-	}
-	kindOptions := []string{"load", "docker-image", name, "--name", cluster}
-	cmd := exec.Command("kind", kindOptions...)
-	_, err := Run(cmd)
-	return err
 }
 
 // GetNonEmptyLines converts given command output string into individual objects

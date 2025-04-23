@@ -19,11 +19,13 @@ package e2e
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"os/exec"
 
 	"github.com/konflux-ci/tekton-queue/test/utils"
 )
@@ -40,16 +42,12 @@ var (
 	isPrometheusOperatorAlreadyInstalled = false
 	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
 	isCertManagerAlreadyInstalled = false
-
-	// projectImage is the name of the image which will be build and loaded
-	// with the code source changes to be tested.
-	projectImage = "example.com/tekton-kueue:v0.0.1"
 )
 
 // TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
 // temporary environment to validate project changes with the the purposed to be used in CI jobs.
-// The default setup requires Kind, builds/loads the Manager Docker image locally, and installs
-// CertManager and Prometheus.
+// The default setup installs CertManager and Prometheus.
+// The IMG environment varialbe must be specified with the image that should be used by the controller's deployment
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 	_, _ = fmt.Fprintf(GinkgoWriter, "Starting tekton-kueue integration test suite\n")
@@ -59,17 +57,6 @@ func TestE2E(t *testing.T) {
 var _ = BeforeSuite(func() {
 	By("Ensure that Prometheus is enabled")
 	_ = utils.UncommentCode("config/default/kustomization.yaml", "#- ../prometheus", "#")
-
-	By("building the manager(Operator) image")
-	cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
-	_, err := utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager(Operator) image")
-
-	// TODO(user): If you want to change the e2e test vendor from Kind, ensure the image is
-	// built and available before running the tests. Also, remove the following block.
-	By("loading the manager(Operator) image on Kind")
-	err = utils.LoadImageToKindClusterWithName(projectImage)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager(Operator) image into Kind")
 
 	// The tests-e2e are intended to run on a temporary cluster that is created and destroyed for testing.
 	// To prevent errors when tests run in environments with Prometheus or CertManager already installed,
@@ -90,11 +77,26 @@ var _ = BeforeSuite(func() {
 		isCertManagerAlreadyInstalled = utils.IsCertManagerCRDsInstalled()
 		if !isCertManagerAlreadyInstalled {
 			_, _ = fmt.Fprintf(GinkgoWriter, "Installing CertManager...\n")
-			Expect(utils.InstallCertManager()).To(Succeed(), "Failed to install CertManager")
+
+			Eventually(
+				utils.InstallCertManager, 3*time.Second, 1*time.Second,
+			).Should(Succeed(), "Failed to install CertManager")
 		} else {
 			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: CertManager is already installed. Skipping installation...\n")
 		}
 	}
+
+	By("checking if Kueue is installed", func() {
+		cmd := exec.Command("kubectl", "get", "crd", "workloads.kueue.x-k8s.io")
+		_, err := utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Kueue isn't installed")
+	})
+
+	By("checking if Kueue is installed", func() {
+		cmd := exec.Command("kubectl", "get", "crd", "pipelineruns.tekton.dev")
+		_, err := utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Tekton isn't installed")
+	})
 })
 
 var _ = AfterSuite(func() {
