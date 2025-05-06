@@ -31,8 +31,6 @@ const (
 	prometheusOperatorVersion = "v0.77.1"
 	prometheusOperatorURL     = "https://github.com/prometheus-operator/prometheus-operator/" +
 		"releases/download/%s/bundle.yaml"
-
-	certmanagerVersion = "v1.16.3"
 )
 
 func warnError(err error) {
@@ -105,7 +103,7 @@ func IsPrometheusCRDsInstalled() bool {
 
 // UninstallCertManager uninstalls the cert manager
 func UninstallCertManager() {
-	cmd := exec.Command("make", "cert-manager-undeploy", "-f", fmt.Sprintf("CERT_MANAGER_VERSION=%s", certmanagerVersion))
+	cmd := exec.Command("make", "cert-manager-undeploy")
 	if _, err := Run(cmd); err != nil {
 		warnError(err)
 	}
@@ -113,7 +111,7 @@ func UninstallCertManager() {
 
 // InstallCertManager installs the cert manager bundle.
 func InstallCertManager() error {
-	cmd := exec.Command("make", "cert-manager", fmt.Sprintf("CERT_MANAGER_VERSION=%s", certmanagerVersion))
+	cmd := exec.Command("make", "cert-manager")
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
