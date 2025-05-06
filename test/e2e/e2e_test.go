@@ -545,13 +545,11 @@ func getK8sClientOrDie(ctx context.Context) client.Client {
 	k8sCache, err := cache.New(cfg, cache.Options{Scheme: scheme})
 	Expect(err).ToNot(HaveOccurred(), "failed to create cache")
 
-	err = jobframework.SetupWorkloadOwnerIndex(
+	Expect(jobframework.SetupWorkloadOwnerIndex(
 		ctx,
 		k8sCache,
 		tekv1.SchemeGroupVersion.WithKind("PipelineRun"),
-	)
-
-	Expect(err).ToNot(HaveOccurred(), "failed to setup indexer")
+	)).To(Succeed(), "failed to setup indexer")
 
 	k8sClient, err := client.New(
 		cfg,
