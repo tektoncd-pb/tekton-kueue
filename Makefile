@@ -232,22 +232,22 @@ endef
 
 .PHONY: kueue
 kueue:
-	kubectl apply --server-side -f https://github.com/kubernetes-sigs/kueue/releases/download/$(KUEUE_VERSION)/manifests.yaml -f hack/kueue-config.yaml
-	kubectl rollout status deployment/kueue-controller-manager -n kueue-system --timeout 300s
+	$(KUBECTL) apply --server-side -f https://github.com/kubernetes-sigs/kueue/releases/download/$(KUEUE_VERSION)/manifests.yaml -f hack/kueue-config.yaml
+	$(KUBECTL) rollout status deployment/kueue-controller-manager -n kueue-system --timeout 300s
 
 .PHONY: tekton
 tekton:
-	kubectl apply --server-side -f https://storage.googleapis.com/tekton-releases/pipeline/previous/$(TEKTON_VERSION)/release.yaml
-	kubectl wait --for=condition=Available deployment --all -n tekton-pipelines --timeout=300s
+	$(KUBECTL) apply --server-side -f https://storage.googleapis.com/tekton-releases/pipeline/previous/$(TEKTON_VERSION)/release.yaml
+	$(KUBECTL) wait --for=condition=Available deployment --all -n tekton-pipelines --timeout=300s
 
 .PHONY: cert-manager
 cert-manager:
-	kubectl apply --server-side -f https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
-	kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
+	$(KUBECTL) apply --server-side -f https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
+	$(KUBECTL) wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
 
 .PHONY: cert-manager-undeploy
 cert-manager-undeploy:
-	kubectl delete -f https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
+	$(KUBECTL) delete -f https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
 
 .PHONY: load-image
 load-image: docker-build
