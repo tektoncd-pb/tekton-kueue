@@ -561,9 +561,12 @@ func getK8sClientOrDie(ctx context.Context) client.Client {
 	Expect(err).ToNot(HaveOccurred(), "failed to create client")
 
 	go func() {
-		err := k8sCache.Start(ctx)
-		if err != nil {
+		if err := k8sCache.Start(ctx); err != nil {
 			panic(err)
+		}
+
+		if synced := k8sCache.WaitForCacheSync(ctx); !synced {
+			panic("failed waiting for cache to sync")
 		}
 	}()
 
