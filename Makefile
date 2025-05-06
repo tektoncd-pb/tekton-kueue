@@ -251,4 +251,4 @@ cert-manager-undeploy:
 
 .PHONY: load-image
 load-image: docker-build
-	dir=$$(mktemp -d) && podman save $(IMG) -o $${dir}/tekton-kueue.tar && kind load image-archive -n $(KIND_CLUSTER)  $${dir}/tekton-kueue.tar
+	dir=$$(mktemp -d) && $(CONTAINER_TOOL) save $(IMG) -o $${dir}/tekton-kueue.tar && kind load image-archive -n $(KIND_CLUSTER)  $${dir}/tekton-kueue.tar
