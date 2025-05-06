@@ -143,7 +143,7 @@ endif
 
 .PHONY: install
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
-	[[ ! -d config/crd ]] && { echo "config/crd directory doesn't exist" || true; } && exit 1
+	[[ ! -d config/crd ]] && { echo "config/crd directory doesn't exist"; } || \
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply --server-side -f -
 
 .PHONY: uninstall
