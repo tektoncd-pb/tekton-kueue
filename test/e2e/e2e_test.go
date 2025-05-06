@@ -102,9 +102,8 @@ var _ = Describe("Manager", Ordered, func() {
 					Name: nsName,
 				},
 			}
-			err := k8sClient.Create(ctx, ns)
-			if !(err == nil || kerrors.IsAlreadyExists(err)) {
-				Expect(err).ToNot(HaveOccurred())
+			Expect(k8sClient.Create(ctx, ns)).To(Satisfy(func(err error) bool {
+				return err == nil || kerrors.IsAlreadyExists(err)
 			}
 		})
 
