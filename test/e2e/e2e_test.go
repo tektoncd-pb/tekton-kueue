@@ -566,7 +566,7 @@ func getK8sClientOrDie(ctx context.Context) client.Client {
 	}()
 
 	if synced := k8sCache.WaitForCacheSync(ctx); !synced {
-	        panic("failed waiting for cache to sync")
+		panic("failed waiting for cache to sync")
 	}
 
 	return k8sClient
