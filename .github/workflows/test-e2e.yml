@@ -40,6 +40,4 @@ jobs:
           podman exec kind-control-plane crictl images
           make kueue
           make tekton
-          ret=0
-          make test-e2e || ret=$?
-          kubectl get pods -n tekton-kueue-system
+          make test-e2e
