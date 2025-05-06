@@ -447,7 +447,7 @@ var _ = Describe("Manager", Ordered, func() {
 		})
 	})
 
-	Context("Pipeline is queued when resources are missing", func() {
+	Context("Pipeline is queued when resources are missing", Ordered, func() {
 		var plr *tekv1.PipelineRun
 		It("PipelineRun is queued because lack of resources", func(ctx context.Context) {
 			plr = plrTemplate.DeepCopy()
