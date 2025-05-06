@@ -143,7 +143,8 @@ endif
 
 .PHONY: install
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
-	[[ -d config/crd ]] && $(KUSTOMIZE) build config/crd | $(KUBECTL) apply --server-side -f - || echo "config/crd directory doesn't exist"
+	[[ ! -d config/crd ]] && { echo "config/crd directory doesn't exist" || true; } && exit 1
+	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply --server-side -f -
 
 .PHONY: uninstall
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
