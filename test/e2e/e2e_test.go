@@ -117,8 +117,7 @@ var _ = Describe("Manager", Ordered, func() {
 				"-f",
 				"config/samples/kueue/kueue-resources.yaml",
 			)
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to apply kueue resources")
+			Expect(utils.Run(cmd)).To(Succeed(), "Failed to apply kueue resources")
 		})
 	})
 
