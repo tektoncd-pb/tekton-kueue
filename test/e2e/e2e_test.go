@@ -104,7 +104,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 			Expect(k8sClient.Create(ctx, ns)).To(Satisfy(func(err error) bool {
 				return err == nil || kerrors.IsAlreadyExists(err)
-			}
+			}))
 		})
 
 		By("Deploying ResourceFlavoer, ClusterQueue and Local Queue", func() {
@@ -117,7 +117,8 @@ var _ = Describe("Manager", Ordered, func() {
 				"-f",
 				"config/samples/kueue/kueue-resources.yaml",
 			)
-			Expect(utils.Run(cmd)).To(Succeed(), "Failed to apply kueue resources")
+			_, err := utils.Run(cmd)
+			Expect(err).To(Succeed(), "Failed to apply kueue resources")
 		})
 	})
 
