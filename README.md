@@ -18,7 +18,7 @@ The controller enables [Kueue] to manage the scheduling of [Tekton] PipelineRuns
 
 **Install CertManager:**
 
-CertManager is requried for providing certificates for the admission webhook.
+CertManager is required for providing certificates for the admission webhook.
 
 ```sh
 make cert-manager
