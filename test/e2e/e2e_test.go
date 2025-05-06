@@ -387,8 +387,6 @@ var _ = Describe("Manager", Ordered, func() {
 	})
 
 	Context("N pipelines complete successfully", Ordered, func() {
-		// todo generate a new one
-
 		plrCount := 5
 		plrs := make([]*tekv1.PipelineRun, plrCount)
 
