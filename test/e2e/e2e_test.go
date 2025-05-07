@@ -50,7 +50,7 @@ import (
 )
 
 // namespace where the project is deployed in
-const namespace = "tekton-kueue-system"
+const namespace = "tekton-kueue"
 
 // serviceAccountName created for the project
 const serviceAccountName = "tekton-kueue-controller-manager"
