@@ -35,6 +35,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
@@ -43,7 +44,6 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	kapi "knative.dev/pkg/apis"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	kueue "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 	"sigs.k8s.io/kueue/pkg/controller/jobframework"
@@ -94,7 +94,9 @@ var _ = Describe("Manager", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
 
 		By("Creating a k8s client")
-		k8sClient = getK8sClientOrDie(ctx)
+		// The context provided by the callback is closed when it's completed,
+		// so we need to create another context for the client.
+		k8sClient = getK8sClientOrDie(context.Background())
 
 		By(fmt.Sprintf("Creating a namespace: %s", nsName), func() {
 			ns := &corev1.Namespace{
@@ -182,6 +184,24 @@ var _ = Describe("Manager", Ordered, func() {
 			} else {
 				fmt.Println("Failed to describe controller pod")
 			}
+
+			By("Fetching PipelineRuns")
+			cmd = exec.Command("kubectl", "get", "-A", "-o", "yaml", "pipelineruns")
+			pipelineruns, err := utils.Run(cmd)
+			if err == nil {
+				fmt.Println("pipelinruns:\n", pipelineruns)
+			} else {
+				fmt.Println("Failed to get pipelinruns")
+			}
+
+			By("Fetching Workloads")
+			cmd = exec.Command("kubectl", "get", "-A", "-o", "yaml", "workloads")
+			workloads, err := utils.Run(cmd)
+			if err == nil {
+				fmt.Println("workloads:\n", workloads)
+			} else {
+				fmt.Println("Failed to get workloads")
+			}
 		}
 	})
 
@@ -190,7 +210,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 	plrTemplate := &tekv1.PipelineRun{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "pipeline",
+			GenerateName: "pipeline-",
 			Namespace:    "test-ns",
 		},
 		Spec: tekv1.PipelineRunSpec{
@@ -515,13 +535,14 @@ func GetOwnedWorkload(k8sClient client.Client, plr *tekv1.PipelineRun, ctx conte
 	err := k8sClient.List(
 		ctx,
 		wlList,
+		client.InNamespace(plr.GetNamespace()),
 		client.MatchingFields{ownerKey: plr.Name},
 	)
 	if err != nil {
 		return nil, err
 	}
 	if len(wlList.Items) != 1 {
-		return nil, fmt.Errorf("found %d owners for the workload", len(wlList.Items))
+		return nil, fmt.Errorf("found %d workloads owned by PipelineRun %s", len(wlList.Items), plr.Name)
 	}
 	wl := wlList.Items[0]
 	hasOwner, err := controllerutil.HasOwnerReference(wl.OwnerReferences, plr, k8sClient.Scheme())
@@ -541,23 +562,21 @@ func getK8sClientOrDie(ctx context.Context) client.Client {
 	utilruntime.Must(kueue.AddToScheme(scheme))
 
 	cfg := ctrl.GetConfigOrDie()
-	k8sCache, err := cache.New(cfg, cache.Options{Scheme: scheme})
+
+	k8sCache, err := cache.New(cfg, cache.Options{Scheme: scheme, ReaderFailOnMissingInformer: true})
 	Expect(err).ToNot(HaveOccurred(), "failed to create cache")
+
+	_, err = k8sCache.GetInformer(ctx, &kueue.Workload{})
+	Expect(err).ToNot(HaveOccurred(), "failed to setup informer for workloads")
+
+	_, err = k8sCache.GetInformer(ctx, &tekv1.PipelineRun{})
+	Expect(err).ToNot(HaveOccurred(), "failed to setup informer for pipelineruns")
 
 	Expect(jobframework.SetupWorkloadOwnerIndex(
 		ctx,
 		k8sCache,
 		tekv1.SchemeGroupVersion.WithKind("PipelineRun"),
 	)).To(Succeed(), "failed to setup indexer")
-
-	k8sClient, err := client.New(
-		cfg,
-		client.Options{
-			Cache:  &client.CacheOptions{Reader: k8sCache},
-			Scheme: scheme,
-		},
-	)
-	Expect(err).ToNot(HaveOccurred(), "failed to create client")
 
 	go func() {
 		if err := k8sCache.Start(ctx); err != nil {
@@ -568,6 +587,15 @@ func getK8sClientOrDie(ctx context.Context) client.Client {
 	if synced := k8sCache.WaitForCacheSync(ctx); !synced {
 		panic("failed waiting for cache to sync")
 	}
+
+	k8sClient, err := client.New(
+		cfg,
+		client.Options{
+			Cache:  &client.CacheOptions{Reader: k8sCache},
+			Scheme: scheme,
+		},
+	)
+	Expect(err).ToNot(HaveOccurred(), "failed to create client")
 
 	return k8sClient
 }
