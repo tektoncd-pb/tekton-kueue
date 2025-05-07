@@ -28,6 +28,7 @@ make cert-manager
 
 The controller currently supports kueue v0.10.x
 If you already have kueue installed, make sure to enable it by adding `pipelineruns.tekton.dev` to the external frameworks.
+Otherwise you can install it with:
 
 ```sh
 make kueue
