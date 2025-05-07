@@ -17,17 +17,36 @@ limitations under the License.
 package e2e
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/konflux-ci/tekton-queue/test/utils"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	kapi "knative.dev/pkg/apis"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	kueue "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	"sigs.k8s.io/kueue/pkg/controller/jobframework"
 )
 
 // namespace where the project is deployed in
@@ -44,11 +63,13 @@ const metricsRoleBindingName = "tekton-kueue-metrics-binding"
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
+	var k8sClient client.Client
+	nsName := "test-ns"
 
 	// Before running the tests, set up the environment by creating the namespace,
 	// enforce the restricted security policy to the namespace, installing CRDs,
 	// and deploying the controller.
-	BeforeAll(func() {
+	BeforeAll(func(ctx context.Context) {
 		By("creating manager namespace")
 		cmd := exec.Command("kubectl", "create", "ns", namespace)
 		_, err := utils.Run(cmd)
@@ -66,9 +87,41 @@ var _ = Describe("Manager", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
 		By("deploying the controller-manager")
+		projectImage := os.Getenv("IMG")
+		Expect(projectImage).ToNot(Equal(""), "IMG environment variable must be declared")
 		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
+
+		By("Creating a k8s client")
+		// The context provided by the callback is closed when it's completed,
+		// so we need to create another context for the client.
+		k8sClient = getK8sClientOrDie(context.Background())
+
+		By(fmt.Sprintf("Creating a namespace: %s", nsName), func() {
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: nsName,
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).To(Satisfy(func(err error) bool {
+				return err == nil || kerrors.IsAlreadyExists(err)
+			}))
+		})
+
+		By("Deploying ResourceFlavoer, ClusterQueue and Local Queue", func() {
+			cmd := exec.Command(
+				"kubectl",
+				"apply",
+				"--server-side",
+				"-n",
+				nsName,
+				"-f",
+				"config/samples/kueue/kueue-resources.yaml",
+			)
+			_, err := utils.Run(cmd)
+			Expect(err).To(Succeed(), "Failed to apply kueue resources")
+		})
 	})
 
 	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
@@ -131,11 +184,56 @@ var _ = Describe("Manager", Ordered, func() {
 			} else {
 				fmt.Println("Failed to describe controller pod")
 			}
+
+			By("Fetching PipelineRuns")
+			cmd = exec.Command("kubectl", "get", "-A", "-o", "yaml", "pipelineruns")
+			pipelineruns, err := utils.Run(cmd)
+			if err == nil {
+				fmt.Println("pipelinruns:\n", pipelineruns)
+			} else {
+				fmt.Println("Failed to get pipelinruns")
+			}
+
+			By("Fetching Workloads")
+			cmd = exec.Command("kubectl", "get", "-A", "-o", "yaml", "workloads")
+			workloads, err := utils.Run(cmd)
+			if err == nil {
+				fmt.Println("workloads:\n", workloads)
+			} else {
+				fmt.Println("Failed to get workloads")
+			}
 		}
 	})
 
 	SetDefaultEventuallyTimeout(2 * time.Minute)
 	SetDefaultEventuallyPollingInterval(time.Second)
+
+	plrTemplate := &tekv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "pipeline-",
+			Namespace:    "test-ns",
+		},
+		Spec: tekv1.PipelineRunSpec{
+			PipelineSpec: &tekv1.PipelineSpec{
+				Tasks: []tekv1.PipelineTask{
+					{
+						Name: "hello-world",
+						TaskSpec: &tekv1.EmbeddedTask{
+							TaskSpec: tekv1.TaskSpec{
+								Steps: []tekv1.Step{
+									{
+										Name:    "hello-world",
+										Image:   "registry.access.redhat.com/ubi9/ubi-micro:latest",
+										Command: []string{"echo", "hello-world"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 
 	Context("Manager", func() {
 		It("should run successfully", func() {
@@ -172,12 +270,24 @@ var _ = Describe("Manager", Ordered, func() {
 
 		It("should ensure the metrics endpoint is serving metrics", func() {
 			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
-			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
+			cmd := exec.Command(
+				"kubectl",
+				"create",
+				"clusterrolebinding",
+				"--dry-run=client",
+				"-o",
+				"yaml",
+				metricsRoleBindingName,
 				"--clusterrole=tekton-kueue-metrics-reader",
 				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
 			)
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create ClusterRoleBinding")
+			crb, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to generate ClusterRoleBinding")
+
+			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(crb)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply ClusterRoleBinding")
 
 			By("validating that the metrics service is available")
 			cmd = exec.Command("kubectl", "get", "service", metricsServiceName, "-n", namespace)
@@ -296,7 +406,199 @@ var _ = Describe("Manager", Ordered, func() {
 		//    strings.ToLower(<Kind>),
 		// ))
 	})
+
+	Context("N pipelines complete successfully", Ordered, func() {
+		plrCount := 5
+		plrs := make([]*tekv1.PipelineRun, plrCount)
+
+		It("Starts PipelineRuns", func(ctx context.Context) {
+			for i := range plrCount {
+				plr := plrTemplate.DeepCopy()
+				Eventually(
+					func() error {
+						return k8sClient.Create(ctx, plr)
+					},
+					90*time.Second,
+					3*time.Second,
+				).Should(Succeed())
+				plrs[i] = plr
+			}
+
+		})
+
+		It("A matching workload was created for each PipelineRun", func(ctx context.Context) {
+			for i := range plrCount {
+				plr := plrs[i]
+				Eventually(func() error {
+					_, err := GetOwnedWorkload(k8sClient, plr, ctx)
+					return err
+				},
+					15*time.Second,
+					3*time.Second,
+				).Should(Succeed())
+			}
+		})
+
+		It("PipelineRuns were completed Successfully", func(ctx context.Context) {
+			for i := range plrCount {
+				key := plrs[i].GetNamespacedName()
+				plr := &tekv1.PipelineRun{}
+				Eventually(func() error {
+					err := k8sClient.Get(ctx, key, plr)
+					if err != nil {
+						return err
+					}
+					condition := plr.Status.GetCondition(kapi.ConditionSucceeded)
+					if condition == nil {
+						return fmt.Errorf("Success condition for PipelinerRun %s is nil", plr.Name)
+					}
+					success := (condition.Reason == tekv1.PipelineRunReasonSuccessful.String()) ||
+						(condition.Reason == tekv1.PipelineRunReasonCompleted.String())
+					if !success {
+						return fmt.Errorf("PipelineRun %s didn't succeed", plr.Name)
+					}
+					return nil
+				},
+					(15*plrCount)*int(time.Second),
+					3*time.Second,
+				).Should(Succeed())
+			}
+		})
+	})
+
+	Context("Pipeline is queued when resources are missing", Ordered, func() {
+		var plr *tekv1.PipelineRun
+		It("PipelineRun is queued because lack of resources", func(ctx context.Context) {
+			plr = plrTemplate.DeepCopy()
+			plr.Annotations = map[string]string{
+				"kueue.konflux-ci.dev/requests-memory": "2Gi",
+			}
+			Eventually(
+				func() error {
+					return k8sClient.Create(ctx, plr)
+				},
+				90*time.Second,
+				3*time.Second,
+			).Should(Succeed())
+		})
+
+		It("Large Pipelinerun is Pending", func(ctx context.Context) {
+			Eventually(
+				func() error {
+					key := plr.GetNamespacedName()
+					err := k8sClient.Get(ctx, key, plr)
+					if err != nil {
+						return err
+					}
+					if plr.Spec.Status != tekv1.PipelineRunSpecStatusPending {
+						return fmt.Errorf("PipelineRun status is %s and not Pending", plr.Spec.Status)
+					}
+
+					return nil
+				},
+				30*time.Second,
+				3*time.Second,
+			).Should(Succeed())
+		})
+
+		It("A matching workload was created for the PipelineRun", func(ctx context.Context) {
+			Eventually(func() error {
+				wl, err := GetOwnedWorkload(k8sClient, plr, ctx)
+				if err != nil {
+					return err
+				}
+				cond := apimeta.FindStatusCondition(wl.Status.Conditions, kueue.WorkloadQuotaReserved)
+				if cond == nil {
+					return fmt.Errorf("Didn't find QuotaReserved condition for workload %s", wl.Name)
+				}
+
+				if cond.Status != metav1.ConditionFalse {
+					return fmt.Errorf("QuotaReserved Condition status isn't false (Quota Was reserved while it should have failed)")
+				}
+
+				if !strings.Contains(cond.Message, "insufficient quota for memory") {
+					return fmt.Errorf("Didn't find expected condition message")
+				}
+
+				return nil
+			},
+				15*time.Second,
+				3*time.Second,
+			).Should(Succeed())
+		})
+	})
 })
+
+func GetOwnedWorkload(k8sClient client.Client, plr *tekv1.PipelineRun, ctx context.Context) (*kueue.Workload, error) {
+	wlList := &kueue.WorkloadList{}
+	ownerKey := jobframework.GetOwnerKey(tekv1.SchemeGroupVersion.WithKind("PipelineRun"))
+	err := k8sClient.List(
+		ctx,
+		wlList,
+		client.InNamespace(plr.GetNamespace()),
+		client.MatchingFields{ownerKey: plr.Name},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if len(wlList.Items) != 1 {
+		return nil, fmt.Errorf("found %d workloads owned by PipelineRun %s", len(wlList.Items), plr.Name)
+	}
+	wl := wlList.Items[0]
+	hasOwner, err := controllerutil.HasOwnerReference(wl.OwnerReferences, plr, k8sClient.Scheme())
+	if err != nil {
+		return nil, err
+	}
+	if !hasOwner {
+		return nil, fmt.Errorf("The workload owner doesn't match the pipelinerun %s", plr.Name)
+	}
+	return &wl, nil
+}
+
+func getK8sClientOrDie(ctx context.Context) client.Client {
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(tekv1.AddToScheme(scheme))
+	utilruntime.Must(kueue.AddToScheme(scheme))
+
+	cfg := ctrl.GetConfigOrDie()
+
+	k8sCache, err := cache.New(cfg, cache.Options{Scheme: scheme, ReaderFailOnMissingInformer: true})
+	Expect(err).ToNot(HaveOccurred(), "failed to create cache")
+
+	_, err = k8sCache.GetInformer(ctx, &kueue.Workload{})
+	Expect(err).ToNot(HaveOccurred(), "failed to setup informer for workloads")
+
+	_, err = k8sCache.GetInformer(ctx, &tekv1.PipelineRun{})
+	Expect(err).ToNot(HaveOccurred(), "failed to setup informer for pipelineruns")
+
+	Expect(jobframework.SetupWorkloadOwnerIndex(
+		ctx,
+		k8sCache,
+		tekv1.SchemeGroupVersion.WithKind("PipelineRun"),
+	)).To(Succeed(), "failed to setup indexer")
+
+	go func() {
+		if err := k8sCache.Start(ctx); err != nil {
+			panic(err)
+		}
+	}()
+
+	if synced := k8sCache.WaitForCacheSync(ctx); !synced {
+		panic("failed waiting for cache to sync")
+	}
+
+	k8sClient, err := client.New(
+		cfg,
+		client.Options{
+			Cache:  &client.CacheOptions{Reader: k8sCache},
+			Scheme: scheme,
+		},
+	)
+	Expect(err).ToNot(HaveOccurred(), "failed to create client")
+
+	return k8sClient
+}
 
 // serviceAccountToken returns a token for the specified service account in the given namespace.
 // It uses the Kubernetes TokenRequest API to generate a token by directly sending a request

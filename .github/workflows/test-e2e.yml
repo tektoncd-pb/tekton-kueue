@@ -2,8 +2,6 @@ name: E2E Tests
 
 on:
   pull_request:
-    branches-ignore: 
-      - "*"
 
 jobs:
   test-e2e:
@@ -29,8 +27,17 @@ jobs:
 
       - name: Create kind cluster
         run: kind create cluster
+        env:
+          KIND_EXPERIMENTAL_PROVIDER: podman        
 
       - name: Running Test e2e
+        env:
+          KIND_EXPERIMENTAL_PROVIDER: podman
+          IMG: konflux-ci.dev/tekton-kueue:v0.0.1
         run: |
           go mod tidy
+          make load-image "IMG=$IMG"
+          podman exec kind-control-plane crictl images
+          make kueue
+          make tekton
           make test-e2e
