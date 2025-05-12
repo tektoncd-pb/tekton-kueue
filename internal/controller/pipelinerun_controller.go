@@ -187,7 +187,7 @@ func (p *PipelineRun) PodSets() []kueue.PodSet {
 // happen if they can not be parsed as `resource.Quantity`.
 func (p *PipelineRun) resourcesRequests() corev1.ResourceList {
 	requests := corev1.ResourceList{
-		PipelineRunCountResourceKey: resource.MustParse("1"),
+		ResourcePipelineRunCount: resource.MustParse("1"),
 	}
 
 	for k, v := range p.GetAnnotations() {
