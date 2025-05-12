@@ -43,8 +43,8 @@ const (
 )
 
 const (
-	ControllerName              = "KueuePipelineRunController"
-	ResourcePipelineRunCount    = "tekton.dev/pipelineruns"
+	ControllerName           = "KueuePipelineRunController"
+	ResourcePipelineRunCount = "tekton.dev/pipelineruns"
 )
 
 const (
