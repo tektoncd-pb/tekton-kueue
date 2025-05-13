@@ -43,13 +43,13 @@ const (
 )
 
 const (
-	ControllerName = "KueuePipelineRunController"
+	ControllerName           = "KueuePipelineRunController"
+	ResourcePipelineRunCount = "tekton.dev/pipelineruns"
 )
 
 const (
 	annotationDomain            = "kueue.konflux-ci.dev/"
 	annotationResourcesRequests = annotationDomain + "requests-"
-	defaultMemoryRequest        = "1Gi"
 )
 
 var (
@@ -179,14 +179,15 @@ func (p *PipelineRun) PodSets() []kueue.PodSet {
 // * `kueue.konflux-ci.dev/requests-storage`
 // * `kueue.konflux-ci.dev/requests-ephemeral-storage`
 //
-// If no annotation is matched, this function will default
-// the memory requested to `1Gi`.
+// By default, a resource which indicates that the workload requires 1
+// PipelineRun will be added. This is useful for controlling the number
+// of PipelineRuns that can be executed concurrently.
 //
 // WARNING: Annotations are not validated and a panic will
 // happen if they can not be parsed as `resource.Quantity`.
 func (p *PipelineRun) resourcesRequests() corev1.ResourceList {
 	requests := corev1.ResourceList{
-		corev1.ResourceMemory: resource.MustParse(defaultMemoryRequest),
+		ResourcePipelineRunCount: resource.MustParse("1"),
 	}
 
 	for k, v := range p.GetAnnotations() {

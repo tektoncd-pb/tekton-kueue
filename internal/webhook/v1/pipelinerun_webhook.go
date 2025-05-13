@@ -70,7 +70,9 @@ func (d *PipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		if plr.Labels == nil {
 			plr.Labels = make(map[string]string)
 		}
-		plr.Labels[QueueLabel] = d.KueueName
+		if _, exists := plr.Labels[QueueLabel]; !exists {
+			plr.Labels[QueueLabel] = d.KueueName
+		}
 	}
 
 	return nil

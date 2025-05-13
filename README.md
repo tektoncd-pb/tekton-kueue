@@ -83,13 +83,15 @@ You can apply the samples using:
 kubectl apply -n tekton-kueue-test -f config/samples/kueue/kueue-resources.yaml
 ```
 
-By default, the controller will assume that each PipelineRun resource requests are of 1Gi of Memory.
-This can be changed by placing annotations on the PipelineRun resource. The available annotations are:
+Resource requests can be specified by placing annotations on the PipelineRun resource. The available annotations are:
 
 - `kueue.konflux-ci.dev/requests-cpu`
 - `kueue.konflux-ci.dev/requests-memory`
 - `kueue.konflux-ci.dev/requests-storage`
 - `kueue.konflux-ci.dev/requests-ephemeral-storage`
+
+By default, a special resource called `tekton.dev/pipelineruns` is added to the [Workload] with the value of 1.
+This resource can be used for controlling the number of PipelineRuns that can be executed concurrently.
 
 You are now ready to create PipelineRuns that will get scheduled by Kueue.
 You can use the following PipelineRun definition (which prints a message to stdout after sleeping for several seconds):

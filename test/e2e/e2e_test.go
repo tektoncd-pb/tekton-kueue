@@ -29,6 +29,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	webhookv1 "github.com/konflux-ci/tekton-queue/internal/webhook/v1"
 	"github.com/konflux-ci/tekton-queue/test/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -466,7 +467,7 @@ var _ = Describe("Manager", Ordered, func() {
 		})
 	})
 
-	Context("Pipeline is queued when resources are missing", Ordered, func() {
+	Context("Pipeline is queued when memory resources are missing", Ordered, func() {
 		var plr *tekv1.PipelineRun
 		It("PipelineRun is queued because lack of resources", func(ctx context.Context) {
 			plr = plrTemplate.DeepCopy()
@@ -483,51 +484,117 @@ var _ = Describe("Manager", Ordered, func() {
 		})
 
 		It("Large Pipelinerun is Pending", func(ctx context.Context) {
-			Eventually(
-				func() error {
-					key := plr.GetNamespacedName()
-					err := k8sClient.Get(ctx, key, plr)
-					if err != nil {
-						return err
-					}
-					if plr.Spec.Status != tekv1.PipelineRunSpecStatusPending {
-						return fmt.Errorf("PipelineRun status is %s and not Pending", plr.Spec.Status)
-					}
-
-					return nil
-				},
-				30*time.Second,
-				3*time.Second,
-			).Should(Succeed())
+			EnsurePipelineRunSpecStatusIs(
+				tekv1.PipelineRunSpecStatusPending,
+				plr,
+				k8sClient,
+				ctx,
+			)
 		})
 
 		It("A matching workload was created for the PipelineRun", func(ctx context.Context) {
-			Eventually(func() error {
-				wl, err := GetOwnedWorkload(k8sClient, plr, ctx)
-				if err != nil {
-					return err
-				}
-				cond := apimeta.FindStatusCondition(wl.Status.Conditions, kueue.WorkloadQuotaReserved)
-				if cond == nil {
-					return fmt.Errorf("Didn't find QuotaReserved condition for workload %s", wl.Name)
-				}
+			EnsureMatchingWorkloadExistWithStatusCondition(
+				kueue.WorkloadQuotaReserved,
+				metav1.ConditionFalse,
+				"insufficient quota for memory",
+				plr,
+				k8sClient,
+				ctx,
+			)
+		})
+	})
 
-				if cond.Status != metav1.ConditionFalse {
-					return fmt.Errorf("QuotaReserved Condition status isn't false (Quota Was reserved while it should have failed)")
-				}
-
-				if !strings.Contains(cond.Message, "insufficient quota for memory") {
-					return fmt.Errorf("Didn't find expected condition message")
-				}
-
-				return nil
-			},
-				15*time.Second,
+	Context("PipelineRun is queued when the allowed number of PipelineRuns is 0", Ordered, func() {
+		var plr *tekv1.PipelineRun
+		It("PipelineRun is queued because lack of resources", func(ctx context.Context) {
+			plr = plrTemplate.DeepCopy()
+			plr.Labels = map[string]string{
+				webhookv1.QueueLabel: "blocking-pipelines-queue",
+			}
+			Eventually(
+				func() error {
+					return k8sClient.Create(ctx, plr)
+				},
+				90*time.Second,
 				3*time.Second,
 			).Should(Succeed())
 		})
+
+		It("Pipelinerun is Pending", func(ctx context.Context) {
+			EnsurePipelineRunSpecStatusIs(
+				tekv1.PipelineRunSpecStatusPending,
+				plr,
+				k8sClient,
+				ctx,
+			)
+		})
+
+		It("A matching workload was created for the PipelineRun", func(ctx context.Context) {
+			EnsureMatchingWorkloadExistWithStatusCondition(
+				kueue.WorkloadQuotaReserved,
+				metav1.ConditionFalse,
+				"insufficient quota for tekton.dev/pipelineruns",
+				plr,
+				k8sClient,
+				ctx,
+			)
+		})
 	})
 })
+
+func EnsureMatchingWorkloadExistWithStatusCondition(
+	statusCondition string,
+	expectedStatus metav1.ConditionStatus,
+	expectedMessage string,
+	plr *tekv1.PipelineRun,
+	k8sClient client.Client,
+	ctx context.Context,
+
+) {
+	Eventually(func(g Gomega) error {
+		wl, err := GetOwnedWorkload(k8sClient, plr, ctx)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		cond := apimeta.FindStatusCondition(wl.Status.Conditions, statusCondition)
+		g.Expect(cond).ToNot(BeNil(), fmt.Sprintf("Didn't find %s condition for workload %s", statusCondition, wl.Name))
+
+		g.Expect(cond.Status).To(
+			Equal(expectedStatus),
+			fmt.Sprintf("%s Condition status isn't %s", statusCondition, expectedStatus),
+		)
+
+		g.Expect(cond.Message).To(ContainSubstring(expectedMessage), "Didn't find expected condition message")
+
+		return nil
+	},
+		15*time.Second,
+		3*time.Second,
+	).Should(Succeed())
+}
+
+func EnsurePipelineRunSpecStatusIs(
+	status string,
+	plr *tekv1.PipelineRun,
+	k8sClient client.Client,
+	ctx context.Context,
+) {
+	Eventually(
+		func() error {
+			key := plr.GetNamespacedName()
+			err := k8sClient.Get(ctx, key, plr)
+			if err != nil {
+				return err
+			}
+			if plr.Spec.Status != tekv1.PipelineRunSpecStatusPending {
+				return fmt.Errorf("PipelineRun status is %s and not Pending", plr.Spec.Status)
+			}
+
+			return nil
+		},
+		30*time.Second,
+		3*time.Second,
+	).Should(Succeed())
+}
 
 func GetOwnedWorkload(k8sClient client.Client, plr *tekv1.PipelineRun, ctx context.Context) (*kueue.Workload, error) {
 	wlList := &kueue.WorkloadList{}
