@@ -121,7 +121,7 @@ The project is built by [Konflux]. Images are published to [quay.io/konflux-ci/t
 
 ## Contributing
 
-**NOTE:** Run `make help` for more information on all potential `make` targets
+**NOTE:** Run `make help` for more information on all potential `make` targets.
 
 More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
 
