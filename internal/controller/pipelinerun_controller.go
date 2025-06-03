@@ -20,9 +20,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	kapi "knative.dev/pkg/apis"
 
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/selection"
-
 	kueueconfig "sigs.k8s.io/kueue/apis/config/v1beta1"
 )
 
@@ -67,19 +64,9 @@ func SetupWithManager(mgr ctrl.Manager) error {
 		},
 	)
 
-	selector := labels.NewSelector()
-	req1, err := labels.NewRequirement("konflux.ci/type", selection.In, []string{"user"})
-	if err != nil {
-		PLRLog.Error(err, "unable to create namespace label selector")
-		return err
-	}
-	selector = selector.Add(*req1)
-
 	return workloadReconciler(
 		mgr.GetClient(),
 		mgr.GetEventRecorderFor("kueue-plr"),
-		jobframework.WithManageJobsWithoutQueueName(true),
-		jobframework.WithManagedJobsNamespaceSelector(selector),
 		jobframework.WithWaitForPodsReady(&kueueconfig.WaitForPodsReady{}),
 	).SetupWithManager(mgr)
 }
