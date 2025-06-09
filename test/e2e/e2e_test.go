@@ -267,7 +267,7 @@ var _ = Describe("Manager", Ordered, func() {
 	Context("Manager", func() {
 		DescribeTable(
 			"should run successfully",
-			func(label string, nameSubstring string, podNamerSetter PodNameSetter) {
+			func(label string, nameSubstring string, podNameSetter PodNameSetter) {
 				By("validating that the controller-manager pod is running as expected")
 				verifyControllerUp := func(g Gomega) {
 					// Get the name of the controller-manager pod
@@ -296,7 +296,7 @@ var _ = Describe("Manager", Ordered, func() {
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(output).To(Equal("Running"), "Incorrect pod status")
 
-					podNamerSetter(podName)
+					podNameSetter(podName)
 
 				}
 				Eventually(verifyControllerUp).Should(Succeed())
