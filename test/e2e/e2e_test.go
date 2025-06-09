@@ -284,7 +284,7 @@ var _ = Describe("Manager", Ordered, func() {
 					g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve pod information")
 					podNames := utils.GetNonEmptyLines(podOutput)
 					g.Expect(podNames).To(HaveLen(1), "expected 1 pod running")
-					podName := (podNames[0])
+					podName := podNames[0]
 					g.Expect(podName).To(ContainSubstring(nameSubstring))
 
 					// Validate the pod's status
