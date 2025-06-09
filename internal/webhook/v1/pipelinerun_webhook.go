@@ -63,8 +63,6 @@ func (d *PipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	if !ok {
 		return fmt.Errorf("expected an PipelineRun object but got %T", obj)
 	}
-	pipelinerunlog.Info("Defaulting for PipelineRun", "name", plr.GetName())
-
 	plr.Spec.Status = tekv1.PipelineRunSpecStatusPending
 	if d.KueueName != "" {
 		if plr.Labels == nil {
