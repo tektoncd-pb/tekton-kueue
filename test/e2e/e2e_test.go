@@ -187,9 +187,9 @@ var _ = Describe("Manager", Ordered, func() {
 				cmd = exec.Command("kubectl", "describe", podName, "-n", namespace)
 				podDescription, err := utils.Run(cmd)
 				if err == nil {
-					fmt.Println("Pod description:\n", podDescription)
+					_, _ = fmt.Fprintf(GinkgoWriter, "Pod description: %s\n", podDescription)
 				} else {
-					fmt.Printf("Failed to describe pod %s\n", podName)
+					_, _ = fmt.Fprintf(GinkgoWriter, "Failed to describe pod %s\n", podName)
 				}
 			}
 
