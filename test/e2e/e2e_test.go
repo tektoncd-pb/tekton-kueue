@@ -329,13 +329,11 @@ var _ = Describe("Manager", Ordered, func() {
 
 				By("validating that the metrics service is available")
 				cmd = exec.Command("kubectl", "get", "service", metricsServiceName, "-n", namespace)
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred(), "Metrics service should exist")
+				Expect(utils.Run(cmd)).Error().NotTo(HaveOccurred(), "Metrics service should exist")
 
 				By("validating that the ServiceMonitor for Prometheus is applied in the namespace")
 				cmd = exec.Command("kubectl", "get", "ServiceMonitor", "-n", namespace)
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred(), "ServiceMonitor should exist")
+				Expect(utils.Run(cmd)).Error().NotTo(HaveOccurred(), "ServiceMonitor should exist")
 
 				By("getting the service account token")
 				token, err := serviceAccountToken(serviceAccountName)
@@ -388,8 +386,7 @@ var _ = Describe("Manager", Ordered, func() {
 						"serviceAccount": "%s"
 					}
 				}`, token, metricsServiceName, namespace, serviceAccountName))
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred(), "Failed to create pod", getPodName())
+				Expect(utils.Run(cmd)).Error().NotTo(HaveOccurred(), "Failed to create pod", getPodName())
 
 				By("waiting for the curl-metrics pod to complete.")
 				verifyCurlUp := func(g Gomega) {
