@@ -325,8 +325,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 				cmd = exec.Command("kubectl", "apply", "-f", "-")
 				cmd.Stdin = strings.NewReader(crb)
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred(), "Failed to apply ClusterRoleBinding")
+				Expect(utils.Run(cmd)).Error().NotTo(HaveOccurred(), "Failed to apply ClusterRoleBinding")
 
 				By("validating that the metrics service is available")
 				cmd = exec.Command("kubectl", "get", "service", metricsServiceName, "-n", namespace)
