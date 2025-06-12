@@ -208,5 +208,3 @@ func (p *PipelineRun) RunWithPodSetsInfo(podSetsInfo []podset.PodSetInfo) error 
 func (p *PipelineRun) Suspend() {
 	// Not implemented because this is not called when JobWithCustomStop is implemented.
 }
-
-// Suspend implements jobframework.GenericJob.
