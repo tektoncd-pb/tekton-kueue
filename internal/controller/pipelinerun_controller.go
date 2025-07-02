@@ -135,7 +135,7 @@ func (p *PipelineRun) Object() client.Object {
 }
 
 // PodSets implements jobframework.GenericJob.
-func (p *PipelineRun) PodSets() []kueue.PodSet {
+func (p *PipelineRun) PodSets() ([]kueue.PodSet, error) {
 	requests := p.resourcesRequests()
 
 	return []kueue.PodSet{
@@ -156,7 +156,7 @@ func (p *PipelineRun) PodSets() []kueue.PodSet {
 			},
 			Count: 1,
 		},
-	}
+	}, nil
 }
 
 // resourcesRequests will match all annotations starting with
