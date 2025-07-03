@@ -115,10 +115,19 @@ func (c *ControllerFlags) AddFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&c.EnableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	fs.DurationVar(&c.LeaseDuration, "leader-elect-lease-duration", 15*time.Second,
-		"The duration that non-leader candidates will wait after observing a leadership renewal until attempting to acquire leadership.")
-	fs.DurationVar(&c.RenewDeadline, "leader-elect-renew-deadline", 10*time.Second,
-		"The interval between attempts by the acting master to renew a leadership slot before it stops leading.")
+	fs.DurationVar(
+		&c.LeaseDuration,
+		"leader-elect-lease-duration",
+		15*time.Second,
+		"The duration that non-leader candidates will wait after observing a "+
+			"leadership renewal until attempting to acquire leadership.",
+	)
+	fs.DurationVar(
+		&c.RenewDeadline,
+		"leader-elect-renew-deadline",
+		10*time.Second,
+		"The interval between attempts by the acting master to renew a leadership slot before it stops leading.",
+	)
 	fs.DurationVar(&c.RetryPeriod, "leader-elect-retry-period", 2*time.Second,
 		"The duration the clients should wait between attempting acquisition and renewal of a leadership.")
 }
