@@ -72,3 +72,9 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - tekton.dev
+  resources:
+  - pipelineruns/finalizers
+  verbs:
+  - update
