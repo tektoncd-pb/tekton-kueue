@@ -120,7 +120,7 @@ func (c *ControllerFlags) AddFlags(fs *flag.FlagSet) {
 		"leader-elect-lease-duration",
 		15*time.Second,
 		"The duration that non-leader candidates will wait after observing a "+
-			"leadership renewal until attempting to acquire leadership.",
+			"	leadership renewal until attempting to acquire leadership.",
 	)
 	fs.DurationVar(
 		&c.RenewDeadline,
@@ -174,12 +174,24 @@ func runController(args []string) {
 	tlsOpts := getTLSOpts(&controllerFlags.SharedFlags)
 	metricsServerOptions, metricsCertWatcher := getMetricsServerOptions(&controllerFlags.SharedFlags, tlsOpts)
 
+	// Log leader election configuration
+	const leaderElectionId = "f2ddafa2.konflux-ci.dev"
+	if controllerFlags.EnableLeaderElection {
+		setupLog.Info("Leader election enabled with lease configuration",
+			"lease-duration", controllerFlags.LeaseDuration,
+			"renew-deadline", controllerFlags.RenewDeadline,
+			"retry-period", controllerFlags.RetryPeriod,
+			"leader-election-id", leaderElectionId)
+	} else {
+		setupLog.Info("Leader election disabled")
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
 		HealthProbeBindAddress: controllerFlags.ProbeAddr,
 		LeaderElection:         controllerFlags.EnableLeaderElection,
-		LeaderElectionID:       "f2ddafa2.konflux-ci.dev",
+		LeaderElectionID:       leaderElectionId,
 		LeaseDuration:          &controllerFlags.LeaseDuration,
 		RenewDeadline:          &controllerFlags.RenewDeadline,
 		RetryPeriod:            &controllerFlags.RetryPeriod,
