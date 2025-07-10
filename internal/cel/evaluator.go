@@ -1,0 +1,172 @@
+package cel
+
+import (
+	"fmt"
+
+	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/types/ref"
+	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+)
+
+// CompiledProgram represents a type-safe compiled CEL program
+// Input: *tekv1.PipelineRun
+// Output: []MutationRequest
+type CompiledProgram struct {
+	program    cel.Program
+	ast        *cel.Ast
+	expression string // Store original expression for debugging
+}
+
+// Evaluate executes the compiled CEL program with a PipelineRun input
+// Input type: *tekv1.PipelineRun (type-safe)
+// Output type: []MutationRequest (validated)
+func (cp *CompiledProgram) Evaluate(pipelineRun *tekv1.PipelineRun) ([]MutationRequest, error) {
+	if pipelineRun == nil {
+		return nil, fmt.Errorf("pipelineRun cannot be nil")
+	}
+
+	// Create the evaluation context with the PipelineRun (type-safe)
+	vars := map[string]interface{}{
+		"pipelineRun": pipelineRun,
+	}
+
+	// Execute the program
+	out, _, err := cp.program.Eval(vars)
+	if err != nil {
+		return nil, fmt.Errorf("failed to evaluate CEL expression %q: %w", cp.expression, err)
+	}
+
+	// Convert the result to []MutationRequest with validation
+	mutations, err := convertToMutationRequests(out)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert result to MutationRequests for expression %q: %w", cp.expression, err)
+	}
+
+	// Validate all mutations
+	for i, mutation := range mutations {
+		if err := mutation.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid mutation at index %d for expression %q: %w", i, cp.expression, err)
+		}
+	}
+
+	return mutations, nil
+}
+
+// GetExpression returns the original CEL expression for debugging
+func (cp *CompiledProgram) GetExpression() string {
+	return cp.expression
+}
+
+// convertToMutationRequests converts CEL evaluation result to []MutationRequest with type safety
+func convertToMutationRequests(result ref.Val) ([]MutationRequest, error) {
+	// Convert the CEL result to a Go native value
+	nativeResult := result.Value()
+
+	// Handle different return types
+	switch v := nativeResult.(type) {
+	case []interface{}:
+		// Handle Go slice (from CEL list)
+		return convertListToMutations(v)
+
+	case []ref.Val:
+		// Handle CEL list type containing ref.Val items
+		nativeList := make([]interface{}, len(v))
+		for i, item := range v {
+			nativeList[i] = item.Value()
+		}
+		return convertListToMutations(nativeList)
+
+	case map[string]interface{}:
+		// Single MutationRequest-compatible map
+		mutation, err := convertSingleMutation(v)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert single mutation: %w", err)
+		}
+		return []MutationRequest{mutation}, nil
+
+	default:
+		return nil, fmt.Errorf("expected MutationRequest-compatible map or list, got %T", nativeResult)
+	}
+}
+
+// convertListToMutations converts a list of items to []MutationRequest
+func convertListToMutations(items []interface{}) ([]MutationRequest, error) {
+	var mutations []MutationRequest
+	for i, item := range items {
+		mutation, err := convertSingleMutation(item)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert list item %d: %w", i, err)
+		}
+		mutations = append(mutations, mutation)
+	}
+	return mutations, nil
+}
+
+// convertSingleMutation converts a single native Go value to MutationRequest with validation
+// Enforces that maps must be MutationRequest-compatible with proper structure
+func convertSingleMutation(val interface{}) (MutationRequest, error) {
+	mapVal, ok := val.(map[string]interface{})
+	if !ok {
+		return MutationRequest{}, fmt.Errorf("expected MutationRequest-compatible map, got %T", val)
+	}
+
+	// Extract and validate all fields
+	mutationType, err := extractMutationType(mapVal)
+	if err != nil {
+		return MutationRequest{}, err
+	}
+
+	key, err := extractStringField(mapVal, "key")
+	if err != nil {
+		return MutationRequest{}, err
+	}
+	if key == "" {
+		return MutationRequest{}, fmt.Errorf("'key' field cannot be empty")
+	}
+
+	value, err := extractStringField(mapVal, "value")
+	if err != nil {
+		return MutationRequest{}, err
+	}
+
+	return MutationRequest{
+		Type:  mutationType,
+		Key:   key,
+		Value: value,
+	}, nil
+}
+
+// extractMutationType extracts and validates the mutation type from a map
+func extractMutationType(mapVal map[string]interface{}) (MutationType, error) {
+	typeVal, exists := mapVal["type"]
+	if !exists {
+		return "", fmt.Errorf("missing required 'type' field")
+	}
+
+	typeStr, ok := typeVal.(string)
+	if !ok {
+		return "", fmt.Errorf("'type' field must be a string, got %T", typeVal)
+	}
+
+	mutationType := MutationType(typeStr)
+	if !mutationType.IsValid() {
+		return "", fmt.Errorf("invalid mutation type: %q, must be one of: %v", typeStr, ValidTypes())
+	}
+
+	return mutationType, nil
+}
+
+// extractStringField extracts a string field from a map with validation
+func extractStringField(mapVal map[string]interface{}, fieldName string) (string, error) {
+	fieldVal, exists := mapVal[fieldName]
+	if !exists {
+		return "", fmt.Errorf("missing required '%s' field", fieldName)
+	}
+
+	fieldStr, ok := fieldVal.(string)
+	if !ok {
+		return "", fmt.Errorf("'%s' field must be a string, got %T", fieldName, fieldVal)
+	}
+
+	return fieldStr, nil
+}

@@ -46,6 +46,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"github.com/konflux-ci/tekton-queue/internal/cel"
 	kueueconfig "github.com/konflux-ci/tekton-queue/internal/config"
 	"github.com/konflux-ci/tekton-queue/internal/controller"
 	webhookv1 "github.com/konflux-ci/tekton-queue/internal/webhook/v1"
@@ -265,7 +266,14 @@ func runWebhook(args []string) {
 		os.Exit(1)
 	}
 
-	customDefaulter, err := webhookv1.NewCustomDefaulter(cfg.QueueName)
+	programs, err := cel.CompileCELPrograms(cfg.CEL.Expressions)
+	if err != nil {
+		setupLog.Error(err, "unable to compile CEL programs")
+		os.Exit(1)
+	}
+	mutator := cel.NewCELMutator(programs)
+
+	customDefaulter, err := webhookv1.NewCustomDefaulter(cfg.QueueName, []webhookv1.PipelineRunMutator{mutator})
 	if err != nil {
 		setupLog.Error(err, "Unable to create custom defaulter for webhook")
 		os.Exit(1)

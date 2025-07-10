@@ -37,6 +37,10 @@ func SetupPipelineRunWebhookWithManager(mgr ctrl.Manager, defaulter admission.Cu
 		Complete()
 }
 
+type PipelineRunMutator interface {
+	Mutate(*tekv1.PipelineRun) error
+}
+
 // TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 
 // +kubebuilder:webhook:path=/mutate-tekton-dev-v1-pipelinerun,mutating=true,failurePolicy=fail,sideEffects=None,groups=tekton.dev,resources=pipelineruns,verbs=create,versions=v1,name=mpipelinerun-v1.kb.io,admissionReviewVersions=v1
@@ -48,11 +52,13 @@ func SetupPipelineRunWebhookWithManager(mgr ctrl.Manager, defaulter admission.Cu
 // as it is used only for temporary operations and does not need to be deeply copied.
 type pipelineRunCustomDefaulter struct {
 	QueueName string
+	mutators []PipelineRunMutator
 }
 
-func NewCustomDefaulter(queueName string) (webhook.CustomDefaulter, error) {
+func NewCustomDefaulter(queueName string, mutators []PipelineRunMutator) (webhook.CustomDefaulter, error) {
 	defaulter := &pipelineRunCustomDefaulter{
 		queueName,
+		mutators,
 	}
 	if err := defaulter.Validate(); err != nil {
 		return nil, err
@@ -73,6 +79,12 @@ func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	}
 	if _, exists := plr.Labels[QueueLabel]; !exists {
 		plr.Labels[QueueLabel] = d.QueueName
+	}
+
+	for _, mutator := range d.mutators {
+		if err := mutator.Mutate(plr); err != nil {
+			return err
+		}
 	}
 
 	return nil
