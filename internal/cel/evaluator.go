@@ -21,7 +21,7 @@ type CompiledProgram struct {
 // Evaluate executes the compiled CEL program with a PipelineRun input
 // Input type: *tekv1.PipelineRun (type-safe)
 // Output type: []MutationRequest (validated)
-func (cp *CompiledProgram) Evaluate(pipelineRun *tekv1.PipelineRun) ([]MutationRequest, error) {
+func (cp *CompiledProgram) Evaluate(pipelineRun *tekv1.PipelineRun) ([]*MutationRequest, error) {
 	if pipelineRun == nil {
 		return nil, fmt.Errorf("pipelineRun cannot be nil")
 	}
@@ -64,7 +64,7 @@ func (cp *CompiledProgram) GetExpression() string {
 }
 
 // convertToMutationRequests converts CEL evaluation result to []MutationRequest with type safety
-func convertToMutationRequests(result ref.Val) ([]MutationRequest, error) {
+func convertToMutationRequests(result ref.Val) ([]*MutationRequest, error) {
 	// Convert the CEL result to a Go native value
 	nativeResult := result.Value()
 
@@ -72,7 +72,11 @@ func convertToMutationRequests(result ref.Val) ([]MutationRequest, error) {
 	switch v := nativeResult.(type) {
 	case []interface{}:
 		// Handle Go slice (from CEL list)
-		return convertListToMutations(v)
+		mutations, err := convertListToMutations(v)
+		if err != nil {
+			return nil, err
+		}
+		return mutations, nil
 
 	case []ref.Val:
 		// Handle CEL list type containing ref.Val items
@@ -80,7 +84,11 @@ func convertToMutationRequests(result ref.Val) ([]MutationRequest, error) {
 		for i, item := range v {
 			nativeList[i] = item.Value()
 		}
-		return convertListToMutations(nativeList)
+		mutations, err := convertListToMutations(nativeList)
+		if err != nil {
+			return nil, err
+		}
+		return mutations, nil
 
 	case map[string]interface{}:
 		// Single MutationRequest-compatible map
@@ -88,7 +96,7 @@ func convertToMutationRequests(result ref.Val) ([]MutationRequest, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert single mutation: %w", err)
 		}
-		return []MutationRequest{mutation}, nil
+		return []*MutationRequest{mutation}, nil
 
 	default:
 		return nil, fmt.Errorf("expected MutationRequest-compatible map or list, got %T", nativeResult)
@@ -96,8 +104,8 @@ func convertToMutationRequests(result ref.Val) ([]MutationRequest, error) {
 }
 
 // convertListToMutations converts a list of items to []MutationRequest
-func convertListToMutations(items []interface{}) ([]MutationRequest, error) {
-	var mutations []MutationRequest
+func convertListToMutations(items []interface{}) ([]*MutationRequest, error) {
+	var mutations []*MutationRequest
 	for i, item := range items {
 		mutation, err := convertSingleMutation(item)
 		if err != nil {
@@ -110,32 +118,32 @@ func convertListToMutations(items []interface{}) ([]MutationRequest, error) {
 
 // convertSingleMutation converts a single native Go value to MutationRequest with validation
 // Enforces that maps must be MutationRequest-compatible with proper structure
-func convertSingleMutation(val interface{}) (MutationRequest, error) {
+func convertSingleMutation(val interface{}) (*MutationRequest, error) {
 	mapVal, ok := val.(map[string]interface{})
 	if !ok {
-		return MutationRequest{}, fmt.Errorf("expected MutationRequest-compatible map, got %T", val)
+		return nil, fmt.Errorf("expected MutationRequest-compatible map, got %T", val)
 	}
 
 	// Extract and validate all fields
 	mutationType, err := extractMutationType(mapVal)
 	if err != nil {
-		return MutationRequest{}, err
+		return nil, err
 	}
 
 	key, err := extractStringField(mapVal, "key")
 	if err != nil {
-		return MutationRequest{}, err
+		return nil, err
 	}
 	if key == "" {
-		return MutationRequest{}, fmt.Errorf("'key' field cannot be empty")
+		return nil, fmt.Errorf("'key' field cannot be empty")
 	}
 
 	value, err := extractStringField(mapVal, "value")
 	if err != nil {
-		return MutationRequest{}, err
+		return nil, err
 	}
 
-	return MutationRequest{
+	return &MutationRequest{
 		Type:  mutationType,
 		Key:   key,
 		Value: value,
@@ -178,11 +186,11 @@ func extractStringField(mapVal map[string]interface{}, fieldName string) (string
 }
 
 func structToCELMap(v interface{}) (map[string]interface{}, error) {
-    b, err := json.Marshal(v)
-    if err != nil {
-        return nil, err
-    }
-    var m map[string]interface{}
-    err = json.Unmarshal(b, &m)
-    return m, err
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]interface{}
+	err = json.Unmarshal(b, &m)
+	return m, err
 }

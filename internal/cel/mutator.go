@@ -62,8 +62,8 @@ func (m *CELMutator) Mutate(pipelineRun *tekv1.PipelineRun) error {
 // Returns:
 //   - []MutationRequest: All mutations from all programs
 //   - error: Any error that occurred during evaluation
-func (m *CELMutator) evaluate(pipelineRun *tekv1.PipelineRun) ([]MutationRequest, error) {
-	var allMutations []MutationRequest
+func (m *CELMutator) evaluate(pipelineRun *tekv1.PipelineRun) ([]*MutationRequest, error) {
+	var allMutations []*MutationRequest
 	for _, program := range m.programs {
 		mutations, err := program.Evaluate(pipelineRun)
 		if err != nil {
@@ -84,7 +84,7 @@ func (m *CELMutator) evaluate(pipelineRun *tekv1.PipelineRun) ([]MutationRequest
 //
 // Returns:
 //   - *tekv1.PipelineRun: The modified PipelineRun (same instance)
-func mutate(pipelineRun *tekv1.PipelineRun, mutation MutationRequest) *tekv1.PipelineRun {
+func mutate(pipelineRun *tekv1.PipelineRun, mutation *MutationRequest) *tekv1.PipelineRun {
 	switch mutation.Type {
 	case MutationTypeLabel:
 		if pipelineRun.Labels == nil {
