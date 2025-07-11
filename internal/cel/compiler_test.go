@@ -18,6 +18,7 @@ func TestCompileCELPrograms_TypeSafety(t *testing.T) {
 				`annotation("test-key", "test-value")`,
 				`label("env", "production")`,
 				`[annotation("key1", "value1"), label("key2", "value2")]`,
+				`priority("high")`,
 			},
 			expectErr: false,
 		},
@@ -121,6 +122,18 @@ func TestValidateExpressionReturnType(t *testing.T) {
 			expression:  `[annotation("key1", "value1"), label("key2", "value2")]`,
 			expectValid: true,
 			description: "Returns list<map<string, any>> with mixed mutation types",
+		},
+		{
+			name:        "valid priority function",
+			expression:  `priority("high")`,
+			expectValid: true,
+			description: "Returns map<string, any> representing priority MutationRequest",
+		},
+		{
+			name:        "valid priority in list",
+			expression:  `[priority("medium"), annotation("queue", "default")]`,
+			expectValid: true,
+			description: "Returns list<map<string, any>> with priority and annotation",
 		},
 		{
 			name:        "invalid string return",

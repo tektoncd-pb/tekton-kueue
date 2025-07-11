@@ -168,6 +168,7 @@ cel:
   expressions:
     - 'annotation("tekton.dev/mutated-by", "tekton-kueue")'
     - 'label("environment", "test")'
+    - 'priority("medium")'
     - '[annotation("build.tekton.dev/timestamp", "2025-01-01T00:00:00Z"), label("app", "test-app")]'
 ```
 
@@ -180,6 +181,7 @@ tekton-kueue mutate --pipelinerun-file test-pipelinerun.yaml --config-dir config
 This will output the mutated PipelineRun with:
 - Applied annotations from CEL expressions
 - Applied labels from CEL expressions  
+- Priority class label (`kueue.x-k8s.io/priority-class`)
 - Queue name label (`kueue.x-k8s.io/queue-name`)
 - Status set to `PipelineRunPending`
 
@@ -199,6 +201,10 @@ cel:
     # Multiple mutations in one expression
     - '[annotation("build.time", "2025-01-01T00:00:00Z"), label("team", "platform")]'
     
+    # Priority function - sets Kueue priority class label
+    - 'priority("high")'
+    - 'priority(pipelineRun.metadata.namespace == "production" ? "high" : "low")'
+    
     # Conditional mutations based on PipelineRun data
     - 'pipelineRun.metadata.namespace == "prod" ? label("priority", "high") : label("priority", "normal")'
     
@@ -210,6 +216,7 @@ cel:
         annotation("tekton.dev/namespace", pipelineRun.metadata.namespace),
         label("app", "tekton-pipeline"),
         label("version", "v1"),
+        priority(pipelineRun.metadata.namespace == "production" ? "high" : "low"),
         pipelineRun.metadata.namespace == "production" ? 
           label("environment", "prod") : 
           label("environment", "dev")
@@ -220,13 +227,42 @@ cel:
 
 1. **Creates annotations** from PipelineRun metadata (pipeline name and namespace)
 2. **Adds standard labels** that apply to all PipelineRuns (`app` and `version`)
-3. **Applies conditional logic** to set the `environment` label based on the namespace
-4. **Uses YAML multiline syntax** (`|`) to make complex expressions readable
-5. **Returns a list** of mutations that are all applied together
+3. **Sets priority class** based on namespace (using the `priority()` function)
+4. **Applies conditional logic** to set the `environment` label based on the namespace
+5. **Uses YAML multiline syntax** (`|`) to make complex expressions readable
+6. **Returns a list** of mutations that are all applied together
 
 For a PipelineRun named `my-pipeline` in namespace `production`, this would add:
 - Annotations: `tekton.dev/pipeline: my-pipeline`, `tekton.dev/namespace: production`
-- Labels: `app: tekton-pipeline`, `version: v1`, `environment: prod`
+- Labels: `app: tekton-pipeline`, `version: v1`, `environment: prod`, `kueue.x-k8s.io/priority-class: high`
+
+##### Priority Function
+
+The `priority()` function is a specialized CEL function that sets the Kueue priority class label:
+
+- **Function**: `priority(value)`
+- **Purpose**: Sets the `kueue.x-k8s.io/priority-class` label on PipelineRuns
+- **Usage**: Integrates with Kueue's [workload prioritization](https://kueue.sigs.k8s.io/docs/concepts/workload/#priority) feature
+
+Examples:
+```yaml
+cel:
+  expressions:
+    # Static priority
+    - 'priority("high")'
+    
+    # Dynamic priority based on namespace
+    - 'priority(pipelineRun.metadata.namespace == "production" ? "high" : "low")'
+    
+    # Combined with other mutations
+    - '[priority("medium"), annotation("queue", "default")]'
+```
+
+The priority function automatically:
+- Creates a **label** with key `kueue.x-k8s.io/priority-class`
+- Sets the label value to the provided string
+- Can be used with dynamic expressions referencing PipelineRun fields
+- Integrates with Kueue's priority-based scheduling system
 
 ### Other Subcommands
 

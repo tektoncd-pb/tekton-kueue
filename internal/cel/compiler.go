@@ -48,6 +48,7 @@ func createCELEnvironment() (*cel.Env, error) {
 		// Add type-safe functions for creating MutationRequests
 		createMutationFunction("annotation", MutationTypeAnnotation, mutationRequestType),
 		createMutationFunction("label", MutationTypeLabel, mutationRequestType),
+		createPriorityMutationFunction("priority", mutationRequestType),
 
 		// Enable standard library functions
 		cel.StdLib(),
@@ -84,6 +85,34 @@ func createMutationFunction(name string, mutationType MutationType, returnType *
 				mutationMap := map[string]interface{}{
 					"type":  string(mutationType),
 					"key":   key,
+					"value": value,
+				}
+
+				return types.NewStringInterfaceMap(types.DefaultTypeAdapter, mutationMap)
+			}),
+		),
+	)
+}
+
+// createPriorityMutationFunction creates a CEL function for priority mutations with hardcoded key
+func createPriorityMutationFunction(name string, returnType *cel.Type) cel.EnvOption {
+	return cel.Function(
+		name,
+		cel.Overload(
+			name+"_string_to_mutation",
+			[]*cel.Type{cel.StringType},
+			returnType,
+			cel.UnaryBinding(func(val ref.Val) ref.Val {
+				value, valueOk := val.Value().(string)
+
+				if !valueOk {
+					return types.NewErr("%s function requires string argument", name)
+				}
+
+				// Create strongly-typed MutationRequest structure as map with hardcoded key
+				mutationMap := map[string]interface{}{
+					"type":  string(MutationTypeLabel),
+					"key":   "kueue.x-k8s.io/priority-class",
 					"value": value,
 				}
 

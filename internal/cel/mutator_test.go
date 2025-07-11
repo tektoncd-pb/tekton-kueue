@@ -236,6 +236,52 @@ func TestCELMutator_Mutate(t *testing.T) {
 			},
 			expectErr: false,
 		},
+		{
+			name: "priority function with static value",
+			expressions: []string{
+				`priority("high")`,
+			},
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"kueue.x-k8s.io/priority-class": "high",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "priority function with dynamic value from pipelineRun",
+			expressions: []string{
+				`priority(pipelineRun.metadata.namespace == "production" ? "high" : "low")`,
+			},
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"kueue.x-k8s.io/priority-class": "low",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "priority function combined with other mutations",
+			expressions: []string{
+				`[
+					priority("medium"),
+					annotation("priority-set-by", "cel-mutator"),
+					label("queue", "default")
+				]`,
+			},
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"kueue.x-k8s.io/priority-class": "medium",
+				"queue":                         "default",
+			},
+			expectedAnnotations: map[string]string{
+				"priority-set-by": "cel-mutator",
+			},
+			expectErr: false,
+		},
 	}
 
 	for _, tt := range tests {
