@@ -93,7 +93,7 @@ func TestCompileCELPrograms_TypeSafety(t *testing.T) {
 
 func TestValidateExpressionReturnType(t *testing.T) {
 	// Create a simple CEL environment for testing
-	env, err := createTypeSafeCELEnvironment()
+	env, err := createCELEnvironment()
 	if err != nil {
 		t.Fatalf("Failed to create CEL environment: %v", err)
 	}

@@ -115,6 +115,124 @@ kubectl get -n tekton-kueue-test workloads
 If You'll try to create several PipelineRuns at one, you would see that some
 of them get queued because the [ClusterQueue] resource reaches its resource limit.
 
+## Command Line Interface
+
+The `tekton-kueue` binary provides several subcommands:
+
+### `mutate` - Apply PipelineRun Mutations
+
+The `mutate` subcommand allows you to test and preview how PipelineRuns will be modified by the webhook before deploying them to the cluster. This is useful for:
+
+- Testing CEL expressions and mutation logic
+- Previewing changes before applying them
+- Debugging configuration issues
+- Validating PipelineRun transformations
+
+#### Usage
+
+```sh
+tekton-kueue mutate --pipelinerun-file <path> --config-dir <path>
+```
+
+#### Parameters
+
+- `--pipelinerun-file`: Path to the file containing the PipelineRun definition (required)
+- `--config-dir`: Path to the directory containing the configuration file (required)
+- `--zap-log-level`: Set logging level (debug, info, error)
+
+#### Example
+
+Create a test PipelineRun file:
+
+```yaml
+# test-pipelinerun.yaml
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: test-pipeline-run
+  namespace: default
+spec:
+  pipelineRef:
+    name: test-pipeline
+  workspaces:
+    - name: shared-workspace
+      emptyDir: {}
+```
+
+Create a configuration file:
+
+```yaml
+# config/config.yaml
+queueName: "test-queue"
+cel:
+  expressions:
+    - 'annotation("tekton.dev/mutated-by", "tekton-kueue")'
+    - 'label("environment", "test")'
+    - '[annotation("build.tekton.dev/timestamp", "2025-01-01T00:00:00Z"), label("app", "test-app")]'
+```
+
+Run the mutation:
+
+```sh
+tekton-kueue mutate --pipelinerun-file test-pipelinerun.yaml --config-dir config/
+```
+
+This will output the mutated PipelineRun with:
+- Applied annotations from CEL expressions
+- Applied labels from CEL expressions  
+- Queue name label (`kueue.x-k8s.io/queue-name`)
+- Status set to `PipelineRunPending`
+
+#### CEL Expression Examples
+
+The configuration supports [CEL (Common Expression Language)](https://github.com/google/cel-spec) expressions for dynamic mutations:
+
+```yaml
+cel:
+  expressions:
+    # Single annotation
+    - 'annotation("tekton.dev/pipeline", pipelineRun.metadata.name)'
+    
+    # Single label
+    - 'label("environment", "production")'
+    
+    # Multiple mutations in one expression
+    - '[annotation("build.time", "2025-01-01T00:00:00Z"), label("team", "platform")]'
+    
+    # Conditional mutations based on PipelineRun data
+    - 'pipelineRun.metadata.namespace == "prod" ? label("priority", "high") : label("priority", "normal")'
+    
+    # Multiline CEL expression for multiple mutations
+    # This expression applies several annotations and labels in one go
+    - |
+      [
+        annotation("tekton.dev/pipeline", pipelineRun.metadata.name),
+        annotation("tekton.dev/namespace", pipelineRun.metadata.namespace),
+        label("app", "tekton-pipeline"),
+        label("version", "v1"),
+        pipelineRun.metadata.namespace == "production" ? 
+          label("environment", "prod") : 
+          label("environment", "dev")
+      ]
+```
+
+**What the multiline expression does:**
+
+1. **Creates annotations** from PipelineRun metadata (pipeline name and namespace)
+2. **Adds standard labels** that apply to all PipelineRuns (`app` and `version`)
+3. **Applies conditional logic** to set the `environment` label based on the namespace
+4. **Uses YAML multiline syntax** (`|`) to make complex expressions readable
+5. **Returns a list** of mutations that are all applied together
+
+For a PipelineRun named `my-pipeline` in namespace `production`, this would add:
+- Annotations: `tekton.dev/pipeline: my-pipeline`, `tekton.dev/namespace: production`
+- Labels: `app: tekton-pipeline`, `version: v1`, `environment: prod`
+
+### Other Subcommands
+
+- `controller` - Run the tekton-kueue controller
+- `webhook` - Run the admission webhook server
+
 ## Project Distribution
 
 The project is built by [Konflux]. Images are published to [quay.io/konflux-ci/tekton-queue](quay.io/konflux-ci/tekton-queue)

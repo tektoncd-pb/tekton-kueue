@@ -14,7 +14,7 @@ func CompileCELPrograms(expressions []string) ([]*CompiledProgram, error) {
 		return nil, fmt.Errorf("expressions list cannot be empty")
 	}
 
-	env, err := createTypeSafeCELEnvironment()
+	env, err := createCELEnvironment()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CEL environment: %w", err)
 	}
@@ -35,15 +35,15 @@ func CompileCELPrograms(expressions []string) ([]*CompiledProgram, error) {
 	return programs, nil
 }
 
-// createTypeSafeCELEnvironment sets up a type-safe CEL environment with PipelineRun context
-func createTypeSafeCELEnvironment() (*cel.Env, error) {
+// createCELEnvironment sets up a type-safe CEL environment with PipelineRun context
+func createCELEnvironment() (*cel.Env, error) {
 	// Define the MutationRequest type structure for return type validation
 	mutationRequestType := cel.MapType(cel.StringType, cel.AnyType)
 
 	// Create CEL environment with proper type declarations
 	env, err := cel.NewEnv(
-		// Declare the PipelineRun variable with proper type
-		cel.Variable("pipelineRun", cel.ObjectType("k8s.io/api/core/v1.PipelineRun")),
+
+		cel.Variable("pipelineRun", cel.MapType(cel.StringType, cel.AnyType)),
 
 		// Add type-safe functions for creating MutationRequests
 		createMutationFunction("annotation", MutationTypeAnnotation, mutationRequestType),

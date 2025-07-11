@@ -1,6 +1,7 @@
 package cel
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/cel-go/cel"
@@ -25,9 +26,14 @@ func (cp *CompiledProgram) Evaluate(pipelineRun *tekv1.PipelineRun) ([]MutationR
 		return nil, fmt.Errorf("pipelineRun cannot be nil")
 	}
 
+	pipelineRunMap, err := structToCELMap(pipelineRun)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert PipelineRun to map: %w", err)
+	}
+
 	// Create the evaluation context with the PipelineRun (type-safe)
 	vars := map[string]interface{}{
-		"pipelineRun": pipelineRun,
+		"pipelineRun": pipelineRunMap,
 	}
 
 	// Execute the program
@@ -169,4 +175,14 @@ func extractStringField(mapVal map[string]interface{}, fieldName string) (string
 	}
 
 	return fieldStr, nil
+}
+
+func structToCELMap(v interface{}) (map[string]interface{}, error) {
+    b, err := json.Marshal(v)
+    if err != nil {
+        return nil, err
+    }
+    var m map[string]interface{}
+    err = json.Unmarshal(b, &m)
+    return m, err
 }
