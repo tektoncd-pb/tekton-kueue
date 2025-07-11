@@ -149,6 +149,93 @@ func TestCELMutator_Mutate(t *testing.T) {
 			expectErr:          true,
 			errMsg:             "annotation key cannot be empty",
 		},
+		{
+			name: "reference pipelineRun name",
+			expressions: []string{
+				`annotation("pipeline-name", pipelineRun.metadata.name)`,
+			},
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			expectedLabels:     nil,
+			expectedAnnotations: map[string]string{
+				"pipeline-name": "test-pipeline",
+			},
+			expectErr: false,
+		},
+		{
+			name: "reference pipelineRun namespace",
+			expressions: []string{
+				`label("namespace", pipelineRun.metadata.namespace)`,
+			},
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"namespace": "test-namespace",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "reference pipelineRef name",
+			expressions: []string{
+				`annotation("pipeline-ref", pipelineRun.spec.pipelineRef.name)`,
+			},
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			expectedLabels:     nil,
+			expectedAnnotations: map[string]string{
+				"pipeline-ref": "test-pipeline",
+			},
+			expectErr: false,
+		},
+		{
+			name: "combine pipelineRun fields",
+			expressions: []string{
+				`[
+					annotation("full-name", pipelineRun.metadata.namespace + "/" + pipelineRun.metadata.name),
+					label("pipeline-ref", pipelineRun.spec.pipelineRef.name)
+				]`,
+			},
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"pipeline-ref": "test-pipeline",
+			},
+			expectedAnnotations: map[string]string{
+				"full-name": "test-namespace/test-pipeline",
+			},
+			expectErr: false,
+		},
+		{
+			name: "conditional expression based on pipelineRun fields",
+			expressions: []string{
+				`annotation("environment", pipelineRun.metadata.namespace == "test-namespace" ? "testing" : "production")`,
+			},
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			expectedLabels:     nil,
+			expectedAnnotations: map[string]string{
+				"environment": "testing",
+			},
+			expectErr: false,
+		},
+		{
+			name: "reference existing label from pipelineRun",
+			expressions: []string{
+				`annotation("copied-label", pipelineRun.metadata.labels["existing-label"])`,
+			},
+			initialLabels: map[string]string{
+				"existing-label": "label-value",
+			},
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"existing-label": "label-value",
+			},
+			expectedAnnotations: map[string]string{
+				"copied-label": "label-value",
+			},
+			expectErr: false,
+		},
 	}
 
 	for _, tt := range tests {
