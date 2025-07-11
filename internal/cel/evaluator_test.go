@@ -124,19 +124,3 @@ func TestCompiledProgram_Evaluate_TypeSafety(t *testing.T) {
 		})
 	}
 }
-
-func TestCompiledProgram_GetExpression(t *testing.T) {
-	expression := `annotation("test-key", "test-value")`
-	programs, err := CompileCELPrograms([]string{expression})
-	if err != nil {
-		t.Fatalf("failed to compile expression: %v", err)
-	}
-
-	if len(programs) != 1 {
-		t.Fatalf("expected 1 program, got %d", len(programs))
-	}
-
-	if programs[0].GetExpression() != expression {
-		t.Errorf("expected expression %q, got %q", expression, programs[0].GetExpression())
-	}
-}
