@@ -31,9 +31,15 @@ func (cp *CompiledProgram) Evaluate(pipelineRun *tekv1.PipelineRun) ([]*Mutation
 		return nil, fmt.Errorf("failed to convert PipelineRun to map: %w", err)
 	}
 
-	// Create the evaluation context with the PipelineRun (type-safe)
+	// Create the evaluation context
+	pacEventType := ""
+	if pipelineRun.Labels != nil {
+		pacEventType = pipelineRun.Labels["pipelinesascode.tekton.dev/event-type"]
+	}
 	vars := map[string]interface{}{
-		"pipelineRun": pipelineRunMap,
+		"pipelineRun":  pipelineRunMap,
+		"plrNamespace": pipelineRun.Namespace,
+		"pacEventType": pacEventType,
 	}
 
 	// Execute the program
