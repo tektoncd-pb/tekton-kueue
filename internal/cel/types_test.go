@@ -2,8 +2,9 @@ package cel
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
+
+	. "github.com/onsi/gomega"
 )
 
 func TestMutationType_IsValid(t *testing.T) {
@@ -20,9 +21,9 @@ func TestMutationType_IsValid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.mt.IsValid(); got != tt.want {
-				t.Errorf("MutationType.IsValid() = %v, want %v", got, tt.want)
-			}
+			g := NewWithT(t)
+			got := tt.mt.IsValid()
+			g.Expect(got).To(Equal(tt.want))
 		})
 	}
 }
@@ -55,24 +56,17 @@ func TestMutationType_JSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 			var mt MutationType
 			err := json.Unmarshal([]byte(tt.input), &mt)
 
 			if tt.expectErr {
-				if err == nil {
-					t.Errorf("expected error but got none")
-				}
+				g.Expect(err).To(HaveOccurred())
 				return
 			}
 
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-				return
-			}
-
-			if mt != tt.expected {
-				t.Errorf("expected %v, got %v", tt.expected, mt)
-			}
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(mt).To(Equal(tt.expected))
 		})
 	}
 }
@@ -136,25 +130,25 @@ func TestMutationRequest_Validate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 			err := tt.request.Validate()
 
 			if tt.expectErr {
-				if err == nil {
-					t.Errorf("expected error but got none")
-				} else if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
-					t.Errorf("expected error message %q, got %q", tt.errMsg, err.Error())
+				g.Expect(err).To(HaveOccurred())
+				if tt.errMsg != "" {
+					g.Expect(err.Error()).To(ContainSubstring(tt.errMsg))
 				}
 				return
 			}
 
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
+			g.Expect(err).NotTo(HaveOccurred())
 		})
 	}
 }
 
 func TestMutationRequest_Usage(t *testing.T) {
+	g := NewWithT(t)
+
 	// Test typical usage patterns for MutationRequest
 	annotation := MutationRequest{
 		Type:  MutationTypeAnnotation,
@@ -162,9 +156,8 @@ func TestMutationRequest_Usage(t *testing.T) {
 		Value: "my-pipeline",
 	}
 
-	if err := annotation.Validate(); err != nil {
-		t.Errorf("Valid annotation should not produce error: %v", err)
-	}
+	err := annotation.Validate()
+	g.Expect(err).NotTo(HaveOccurred(), "Valid annotation should not produce error")
 
 	label := MutationRequest{
 		Type:  MutationTypeLabel,
@@ -172,22 +165,16 @@ func TestMutationRequest_Usage(t *testing.T) {
 		Value: "production",
 	}
 
-	if err := label.Validate(); err != nil {
-		t.Errorf("Valid label should not produce error: %v", err)
-	}
+	err = label.Validate()
+	g.Expect(err).NotTo(HaveOccurred(), "Valid label should not produce error")
 
 	// Test JSON marshaling/unmarshaling
 	data, err := json.Marshal(annotation)
-	if err != nil {
-		t.Errorf("Failed to marshal annotation: %v", err)
-	}
+	g.Expect(err).NotTo(HaveOccurred(), "Failed to marshal annotation")
 
 	var unmarshaled MutationRequest
-	if err := json.Unmarshal(data, &unmarshaled); err != nil {
-		t.Errorf("Failed to unmarshal annotation: %v", err)
-	}
+	err = json.Unmarshal(data, &unmarshaled)
+	g.Expect(err).NotTo(HaveOccurred(), "Failed to unmarshal annotation")
 
-	if unmarshaled != annotation {
-		t.Errorf("Unmarshaled annotation doesn't match original: got %+v, want %+v", unmarshaled, annotation)
-	}
+	g.Expect(unmarshaled).To(Equal(annotation), "Unmarshaled annotation should match original")
 }
