@@ -7,6 +7,56 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Common test constants to reduce duplication
+const (
+	complexPriorityExpression = `pacEventType == 'push' ? priority('push') :
+				pacEventType == 'pull_request' ? priority('pull-request') :
+				pacTestEventType == 'push' ? priority('push') :
+				pacTestEventType == 'pull_request' ? priority('pull-request') :
+				plrNamespace == 'rhtap-releng-tenant' ? priority('release') :
+				plrNamespace == 'mintmaker' ? priority('dependency-update') :
+				priority('default')`
+
+	buildPlatformsExpression = `has(pipelineRun.spec.params) && pipelineRun.spec.params.exists(p, p.name == 'build-platforms') ?
+				pipelineRun.spec.params.filter(p, p.name == 'build-platforms')[0].value.map(
+					p,
+					annotation("kueue.konflux-ci.dev/requests-" + p, "1") 
+				) : []`
+)
+
+// Common test data helpers
+func getBuildPlatformsParams() []tekv1.Param {
+	return []tekv1.Param{
+		{
+			Name: "build-platforms",
+			Value: tekv1.ParamValue{
+				Type: tekv1.ParamTypeArray,
+				ArrayVal: []string{
+					"linux/arm64",
+					"linux/amd64",
+					"linux/s390x",
+					"linux/ppc64le",
+				},
+			},
+		},
+	}
+}
+
+func getBuildPlatformsParamsSmall() []tekv1.Param {
+	return []tekv1.Param{
+		{
+			Name: "build-platforms",
+			Value: tekv1.ParamValue{
+				Type: tekv1.ParamTypeArray,
+				ArrayVal: []string{
+					"linux/arm64",
+					"linux/amd64",
+				},
+			},
+		},
+	}
+}
+
 func TestNewCELMutator(t *testing.T) {
 	programs, err := CompileCELPrograms([]string{
 		`annotation("test-key", "test-value")`,
@@ -287,13 +337,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 		{
 			name: "complex priority expression - push event",
 			expressions: []string{
-				`pacEventType == 'push' ? priority('push') :
-				pacEventType == 'pull_request' ? priority('pull-request') :
-				pacTestEventType == 'push' ? priority('push') :
-				pacTestEventType == 'pull_request' ? priority('pull-request') :
-				plrNamespace == 'rhtap-releng-tenant' ? priority('release') :
-				plrNamespace == 'mintmaker' ? priority('dependency-update') :
-				priority('default')`,
+				complexPriorityExpression,
 			},
 			initialLabels: map[string]string{
 				"pipelinesascode.tekton.dev/event-type": "push",
@@ -309,13 +353,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 		{
 			name: "complex priority expression - pull request event",
 			expressions: []string{
-				`pacEventType == 'push' ? priority('push') :
-				pacEventType == 'pull_request' ? priority('pull-request') :
-				pacTestEventType == 'push' ? priority('push') :
-				pacTestEventType == 'pull_request' ? priority('pull-request') :
-				plrNamespace == 'rhtap-releng-tenant' ? priority('release') :
-				plrNamespace == 'mintmaker' ? priority('dependency-update') :
-				priority('default')`,
+				complexPriorityExpression,
 			},
 			initialLabels: map[string]string{
 				"pipelinesascode.tekton.dev/event-type": "pull_request",
@@ -331,13 +369,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 		{
 			name: "complex priority expression - test event",
 			expressions: []string{
-				`pacEventType == 'push' ? priority('push') :
-				pacEventType == 'pull_request' ? priority('pull-request') :
-				pacTestEventType == 'push' ? priority('push') :
-				pacTestEventType == 'pull_request' ? priority('pull-request') :
-				plrNamespace == 'rhtap-releng-tenant' ? priority('release') :
-				plrNamespace == 'mintmaker' ? priority('dependency-update') :
-				priority('default')`,
+				complexPriorityExpression,
 			},
 			initialLabels: map[string]string{
 				"pac.test.appstudio.openshift.io/event-type": "push",
@@ -353,13 +385,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 		{
 			name: "complex priority expression - release namespace",
 			expressions: []string{
-				`pacEventType == 'push' ? priority('push') :
-				pacEventType == 'pull_request' ? priority('pull-request') :
-				pacTestEventType == 'push' ? priority('push') :
-				pacTestEventType == 'pull_request' ? priority('pull-request') :
-				plrNamespace == 'rhtap-releng-tenant' ? priority('release') :
-				plrNamespace == 'mintmaker' ? priority('dependency-update') :
-				priority('default')`,
+				complexPriorityExpression,
 			},
 			namespace:          "rhtap-releng-tenant",
 			initialLabels:      nil,
@@ -373,13 +399,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 		{
 			name: "complex priority expression - dependency update namespace",
 			expressions: []string{
-				`pacEventType == 'push' ? priority('push') :
-				pacEventType == 'pull_request' ? priority('pull-request') :
-				pacTestEventType == 'push' ? priority('push') :
-				pacTestEventType == 'pull_request' ? priority('pull-request') :
-				plrNamespace == 'rhtap-releng-tenant' ? priority('release') :
-				plrNamespace == 'mintmaker' ? priority('dependency-update') :
-				priority('default')`,
+				complexPriorityExpression,
 			},
 			namespace:          "mintmaker",
 			initialLabels:      nil,
@@ -393,13 +413,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 		{
 			name: "complex priority expression - default fallback",
 			expressions: []string{
-				`pacEventType == 'push' ? priority('push') :
-				pacEventType == 'pull_request' ? priority('pull-request') :
-				pacTestEventType == 'push' ? priority('push') :
-				pacTestEventType == 'pull_request' ? priority('pull-request') :
-				plrNamespace == 'rhtap-releng-tenant' ? priority('release') :
-				plrNamespace == 'mintmaker' ? priority('dependency-update') :
-				priority('default')`,
+				complexPriorityExpression,
 			},
 			initialLabels:      nil,
 			initialAnnotations: nil,
@@ -412,29 +426,12 @@ func TestCELMutator_Mutate(t *testing.T) {
 		{
 			name: "build-platforms parameter mapping to resource requests",
 			expressions: []string{
-				`has(pipelineRun.spec.params) && pipelineRun.spec.params.exists(p, p.name == 'build-platforms') ?
-				pipelineRun.spec.params.filter(p, p.name == 'build-platforms')[0].value.map(
-					p,
-					annotation("kueue.konflux-ci.dev/requests-" + p, "1") 
-				) : []`,
+				buildPlatformsExpression,
 			},
 			initialLabels:      nil,
 			initialAnnotations: nil,
-			initialParams: []tekv1.Param{
-				{
-					Name: "build-platforms",
-					Value: tekv1.ParamValue{
-						Type: tekv1.ParamTypeArray,
-						ArrayVal: []string{
-							"linux/arm64",
-							"linux/amd64",
-							"linux/s390x",
-							"linux/ppc64le",
-						},
-					},
-				},
-			},
-			expectedLabels: nil,
+			initialParams:      getBuildPlatformsParams(),
+			expectedLabels:     nil,
 			expectedAnnotations: map[string]string{
 				"kueue.konflux-ci.dev/requests-linux/arm64":   "1",
 				"kueue.konflux-ci.dev/requests-linux/amd64":   "1",
@@ -446,11 +443,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 		{
 			name: "build-platforms parameter missing - returns empty array",
 			expressions: []string{
-				`has(pipelineRun.spec.params) && pipelineRun.spec.params.exists(p, p.name == 'build-platforms') ?
-				pipelineRun.spec.params.filter(p, p.name == 'build-platforms')[0].value.map(
-					p,
-					annotation("kueue.konflux-ci.dev/requests-" + p, "1") 
-				) : []`,
+				buildPlatformsExpression,
 			},
 			initialLabels:       nil,
 			initialAnnotations:  nil,
@@ -465,26 +458,11 @@ func TestCELMutator_Mutate(t *testing.T) {
 				`priority("high")`,
 				`annotation("build-tool", "tekton")`,
 				`label("team", "platform")`,
-				`has(pipelineRun.spec.params) && pipelineRun.spec.params.exists(p, p.name == 'build-platforms') ?
-				pipelineRun.spec.params.filter(p, p.name == 'build-platforms')[0].value.map(
-					p,
-					annotation("kueue.konflux-ci.dev/requests-" + p, "1") 
-				) : []`,
+				buildPlatformsExpression,
 			},
 			initialLabels:      nil,
 			initialAnnotations: nil,
-			initialParams: []tekv1.Param{
-				{
-					Name: "build-platforms",
-					Value: tekv1.ParamValue{
-						Type: tekv1.ParamTypeArray,
-						ArrayVal: []string{
-							"linux/arm64",
-							"linux/amd64",
-						},
-					},
-				},
-			},
+			initialParams:      getBuildPlatformsParamsSmall(),
 			expectedLabels: map[string]string{
 				"kueue.x-k8s.io/priority-class": "high",
 				"team":                          "platform",
