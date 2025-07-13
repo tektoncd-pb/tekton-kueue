@@ -31,6 +31,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 	tests := []struct {
 		name                string
 		expressions         []string
+		namespace           string // optional, defaults to "test-namespace"
 		initialLabels       map[string]string
 		initialAnnotations  map[string]string
 		expectedLabels      map[string]string
@@ -282,15 +283,146 @@ func TestCELMutator_Mutate(t *testing.T) {
 			},
 			expectErr: false,
 		},
+		{
+			name: "complex priority expression - push event",
+			expressions: []string{
+				`pacEventType == 'push' ? priority('push') :
+				pacEventType == 'pull_request' ? priority('pull-request') :
+				pacTestEventType == 'push' ? priority('push') :
+				pacTestEventType == 'pull_request' ? priority('pull-request') :
+				plrNamespace == 'rhtap-releng-tenant' ? priority('release') :
+				plrNamespace == 'mintmaker' ? priority('dependency-update') :
+				priority('default')`,
+			},
+			initialLabels: map[string]string{
+				"pipelinesascode.tekton.dev/event-type": "push",
+			},
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"pipelinesascode.tekton.dev/event-type": "push",
+				"kueue.x-k8s.io/priority-class":         "push",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "complex priority expression - pull request event",
+			expressions: []string{
+				`pacEventType == 'push' ? priority('push') :
+				pacEventType == 'pull_request' ? priority('pull-request') :
+				pacTestEventType == 'push' ? priority('push') :
+				pacTestEventType == 'pull_request' ? priority('pull-request') :
+				plrNamespace == 'rhtap-releng-tenant' ? priority('release') :
+				plrNamespace == 'mintmaker' ? priority('dependency-update') :
+				priority('default')`,
+			},
+			initialLabels: map[string]string{
+				"pipelinesascode.tekton.dev/event-type": "pull_request",
+			},
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"pipelinesascode.tekton.dev/event-type": "pull_request",
+				"kueue.x-k8s.io/priority-class":         "pull-request",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "complex priority expression - test event",
+			expressions: []string{
+				`pacEventType == 'push' ? priority('push') :
+				pacEventType == 'pull_request' ? priority('pull-request') :
+				pacTestEventType == 'push' ? priority('push') :
+				pacTestEventType == 'pull_request' ? priority('pull-request') :
+				plrNamespace == 'rhtap-releng-tenant' ? priority('release') :
+				plrNamespace == 'mintmaker' ? priority('dependency-update') :
+				priority('default')`,
+			},
+			initialLabels: map[string]string{
+				"pac.test.appstudio.openshift.io/event-type": "push",
+			},
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"pac.test.appstudio.openshift.io/event-type": "push",
+				"kueue.x-k8s.io/priority-class":              "push",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "complex priority expression - release namespace",
+			expressions: []string{
+				`pacEventType == 'push' ? priority('push') :
+				pacEventType == 'pull_request' ? priority('pull-request') :
+				pacTestEventType == 'push' ? priority('push') :
+				pacTestEventType == 'pull_request' ? priority('pull-request') :
+				plrNamespace == 'rhtap-releng-tenant' ? priority('release') :
+				plrNamespace == 'mintmaker' ? priority('dependency-update') :
+				priority('default')`,
+			},
+			namespace:          "rhtap-releng-tenant",
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"kueue.x-k8s.io/priority-class": "release",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "complex priority expression - dependency update namespace",
+			expressions: []string{
+				`pacEventType == 'push' ? priority('push') :
+				pacEventType == 'pull_request' ? priority('pull-request') :
+				pacTestEventType == 'push' ? priority('push') :
+				pacTestEventType == 'pull_request' ? priority('pull-request') :
+				plrNamespace == 'rhtap-releng-tenant' ? priority('release') :
+				plrNamespace == 'mintmaker' ? priority('dependency-update') :
+				priority('default')`,
+			},
+			namespace:          "mintmaker",
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"kueue.x-k8s.io/priority-class": "dependency-update",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "complex priority expression - default fallback",
+			expressions: []string{
+				`pacEventType == 'push' ? priority('push') :
+				pacEventType == 'pull_request' ? priority('pull-request') :
+				pacTestEventType == 'push' ? priority('push') :
+				pacTestEventType == 'pull_request' ? priority('pull-request') :
+				plrNamespace == 'rhtap-releng-tenant' ? priority('release') :
+				plrNamespace == 'mintmaker' ? priority('dependency-update') :
+				priority('default')`,
+			},
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"kueue.x-k8s.io/priority-class": "default",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Determine namespace to use
+			namespace := tt.namespace
+			if namespace == "" {
+				namespace = "test-namespace"
+			}
+
 			// Create PipelineRun with initial state
 			pipelineRun := &tekv1.PipelineRun{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        "test-pipeline",
-					Namespace:   "test-namespace",
+					Namespace:   namespace,
 					Labels:      copyMap(tt.initialLabels),
 					Annotations: copyMap(tt.initialAnnotations),
 				},
