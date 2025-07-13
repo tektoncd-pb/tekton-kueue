@@ -156,8 +156,10 @@ type MutateFlags struct {
 }
 
 func (m *MutateFlags) AddFlags(fs *flag.FlagSet) {
-	fs.StringVar(&m.PipelineRunFile, "pipelinerun-file", "", "Path to the file containing the PipelineRun definition (required)")
-	fs.StringVar(&m.ConfigDir, "config-dir", "", "The directory that contains the configuration file for the tekton-kueue (required)")
+	fs.StringVar(&m.PipelineRunFile, "pipelinerun-file", "",
+		"Path to the file containing the PipelineRun definition (required)")
+	fs.StringVar(&m.ConfigDir, "config-dir", "",
+		"The directory that contains the configuration file for the tekton-kueue (required)")
 	m.ZapOptions = &zap.Options{
 		Development: true,
 	}

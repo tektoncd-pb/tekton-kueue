@@ -39,9 +39,9 @@ func (cp *CompiledProgram) Evaluate(pipelineRun *tekv1.PipelineRun) ([]*Mutation
 		pacTestEventType = pipelineRun.Labels["pac.test.appstudio.openshift.io/event-type"]
 	}
 	vars := map[string]interface{}{
-		"pipelineRun":  pipelineRunMap,
-		"plrNamespace": pipelineRun.Namespace,
-		"pacEventType": pacEventType,
+		"pipelineRun":      pipelineRunMap,
+		"plrNamespace":     pipelineRun.Namespace,
+		"pacEventType":     pacEventType,
 		"pacTestEventType": pacTestEventType,
 	}
 
@@ -114,7 +114,7 @@ func convertToMutationRequests(result ref.Val) ([]*MutationRequest, error) {
 
 // convertListToMutations converts a list of items to []MutationRequest
 func convertListToMutations(items []interface{}) ([]*MutationRequest, error) {
-	var mutations []*MutationRequest
+	mutations := make([]*MutationRequest, 0, len(items))
 	for i, item := range items {
 		mutation, err := convertSingleMutation(item)
 		if err != nil {

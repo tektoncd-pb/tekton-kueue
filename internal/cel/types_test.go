@@ -190,4 +190,4 @@ func TestMutationRequest_Usage(t *testing.T) {
 	if unmarshaled != annotation {
 		t.Errorf("Unmarshaled annotation doesn't match original: got %+v, want %+v", unmarshaled, annotation)
 	}
-} 
+}

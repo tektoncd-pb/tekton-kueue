@@ -52,7 +52,7 @@ type PipelineRunMutator interface {
 // as it is used only for temporary operations and does not need to be deeply copied.
 type pipelineRunCustomDefaulter struct {
 	QueueName string
-	mutators []PipelineRunMutator
+	mutators  []PipelineRunMutator
 }
 
 func NewCustomDefaulter(queueName string, mutators []PipelineRunMutator) (webhook.CustomDefaulter, error) {
