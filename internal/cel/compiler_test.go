@@ -1,8 +1,9 @@
 package cel
 
 import (
-	"strings"
 	"testing"
+
+	. "github.com/onsi/gomega"
 )
 
 func TestCompileCELPrograms_TypeSafety(t *testing.T) {
@@ -62,42 +63,34 @@ func TestCompileCELPrograms_TypeSafety(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 			programs, err := CompileCELPrograms(tt.expressions)
 
 			if tt.expectErr {
-				if err == nil {
-					t.Errorf("expected error but got none")
-				} else if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
-					t.Errorf("expected error message %q, got %q", tt.errMsg, err.Error())
+				g.Expect(err).To(HaveOccurred())
+				if tt.errMsg != "" {
+					g.Expect(err.Error()).To(ContainSubstring(tt.errMsg))
 				}
 				return
 			}
 
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-				return
-			}
-
-			if len(programs) != len(tt.expressions) {
-				t.Errorf("expected %d programs, got %d", len(tt.expressions), len(programs))
-			}
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(programs).To(HaveLen(len(tt.expressions)))
 
 			// Test GetExpression method
 			for i, program := range programs {
-				if program.GetExpression() != tt.expressions[i] {
-					t.Errorf("program %d: expected expression %q, got %q", i, tt.expressions[i], program.GetExpression())
-				}
+				g.Expect(program.GetExpression()).To(Equal(tt.expressions[i]))
 			}
 		})
 	}
 }
 
 func TestValidateExpressionReturnType(t *testing.T) {
+	g := NewWithT(t)
+
 	// Create a simple CEL environment for testing
 	env, err := createCELEnvironment()
-	if err != nil {
-		t.Fatalf("Failed to create CEL environment: %v", err)
-	}
+	g.Expect(err).NotTo(HaveOccurred())
 
 	tests := []struct {
 		name        string
@@ -157,11 +150,13 @@ func TestValidateExpressionReturnType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
 			// Compile the expression
 			ast, issues := env.Compile(tt.expression)
 			if issues != nil && issues.Err() != nil {
 				if tt.expectValid {
-					t.Errorf("Expression should compile but failed: %v", issues.Err())
+					g.Expect(issues.Err()).NotTo(HaveOccurred(), "Expression should compile but failed")
 				}
 				return
 			}
@@ -170,32 +165,20 @@ func TestValidateExpressionReturnType(t *testing.T) {
 			err := ValidateExpressionReturnType(ast)
 
 			if tt.expectValid {
-				if err != nil {
-					t.Errorf("Expected valid return type but got error: %v", err)
-				}
+				g.Expect(err).NotTo(HaveOccurred())
 			} else {
-				if err == nil {
-					t.Errorf("Expected invalid return type but validation passed")
-				} else {
-					t.Logf("Correctly caught invalid return type: %v", err)
-				}
+				g.Expect(err).To(HaveOccurred())
 			}
 		})
 	}
 }
 
 func TestCompiledProgram_GetExpression(t *testing.T) {
+	g := NewWithT(t)
+
 	expression := `annotation("test-key", "test-value")`
 	programs, err := CompileCELPrograms([]string{expression})
-	if err != nil {
-		t.Fatalf("failed to compile expression: %v", err)
-	}
-
-	if len(programs) != 1 {
-		t.Fatalf("expected 1 program, got %d", len(programs))
-	}
-
-	if programs[0].GetExpression() != expression {
-		t.Errorf("expected expression %q, got %q", expression, programs[0].GetExpression())
-	}
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(programs).To(HaveLen(1))
+	g.Expect(programs[0].GetExpression()).To(Equal(expression))
 }
