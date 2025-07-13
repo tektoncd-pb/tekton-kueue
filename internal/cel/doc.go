@@ -12,7 +12,7 @@
 //
 //   - Input: *tekton.PipelineRun (strongly typed and validated)
 //   - Output: []MutationRequest (validated structure and content)
-//   - Functions: annotation(key, value) and label(key, value)
+//   - Functions: annotation(key, value), label(key, value), and priority(value)
 //   - Expressions: Single mutations or lists of mutations
 //
 // # Basic Usage
@@ -21,6 +21,7 @@
 //		`annotation("build-info", "compiled-" + pipelineRun.metadata.name)`,
 //		`label("environment", "production")`,
 //		`[annotation("key1", "value1"), label("key2", "value2")]`,
+//		`priority("high")`,
 //	}
 //
 //	programs, err := cel.CompileCELPrograms(expressions)
@@ -45,6 +46,7 @@
 //	expressions := []string{
 //		`annotation("tekton.dev/pipeline", "my-pipeline")`,
 //		`[label("env", "production"), annotation("owner", "team-a")]`,
+//		`priority("default")`,
 //	}
 //
 //	programs, err := cel.CompileCELPrograms(expressions)
@@ -64,7 +66,40 @@
 // # Available CEL Functions
 //
 //   - annotation(key: string, value: string) -> MutationRequest
+//     Creates an annotation mutation with the specified key and value
+//
 //   - label(key: string, value: string) -> MutationRequest
+//     Creates a label mutation with the specified key and value
+//
+//   - priority(value: string) -> MutationRequest
+//     Creates a label mutation with key "kueue.x-k8s.io/priority-class" and the specified value
+//
+// # Available CEL Variables
+//
+//   - pipelineRun: map<string, any> - The full PipelineRun object as a CEL-accessible map
+//   - plrNamespace: string - The namespace of the PipelineRun
+//   - pacEventType: string - Value from label "pipelinesascode.tekton.dev/event-type" (empty if not present)
+//   - pacTestEventType: string - Value from label "pac.test.appstudio.openshift.io/event-type" (empty if not present)
+//
+// # Advanced Usage Examples
+//
+// Conditional mutations based on namespace:
+//
+//	expression := `plrNamespace == "production" ? priority("high") : priority("default")`
+//
+// Conditional mutations based on event type:
+//
+//	expression := `pacEventType == "push" ? priority("push") :
+//	              pacEventType == "pull_request" ? priority("pull-request") :
+//	              priority("default")`
+//
+// Accessing PipelineRun parameters:
+//
+//	expression := `has(pipelineRun.spec.params) &&
+//	              pipelineRun.spec.params.exists(p, p.name == "build-platforms") ?
+//	              pipelineRun.spec.params.filter(p, p.name == "build-platforms")[0].value.map(
+//	                  p, annotation("kueue.konflux-ci.dev/requests-" + p, "1")
+//	              ) : []`
 //
 // # Package Structure
 //
@@ -74,7 +109,7 @@
 //   - compiler.go: CEL environment setup, compilation, and type checking
 //   - evaluator.go: Runtime program evaluation and result conversion
 //   - mutator.go: CELMutator for convenient mutation application
-//   - example_usage.go: Comprehensive usage examples and patterns
+//   - metrics.go: Prometheus metrics for monitoring CEL evaluation failures
 //
 // # Validation Hierarchy
 //
@@ -90,4 +125,9 @@
 //   - Type mismatches with expected vs actual types
 //   - Runtime evaluation errors with expression details
 //   - Validation failures with field-specific information
+//
+// # Metrics
+//
+// The package exposes Prometheus metrics:
+//   - cel_evaluation_failures_total: Counter for CEL evaluation failures
 package cel
