@@ -7,15 +7,8 @@ resources:
 - deployment.yaml
 - manifests.yaml
 - service.yaml
+- config.yaml
 
 configurations:
 - kustomizeconfig.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
-
-configMapGenerator:
-- name: config
-  files:
-  - config.yaml
-  options:
-    disableNameSuffixHash: true
-

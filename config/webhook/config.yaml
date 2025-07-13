@@ -1,1 +1,8 @@
-queueName: pipelines-queue
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config
+  namespace: system
+data:
+  config.yaml: |
+    queueName: pipelines-queue
