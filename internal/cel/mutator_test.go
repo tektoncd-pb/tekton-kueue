@@ -459,6 +459,43 @@ func TestCELMutator_Mutate(t *testing.T) {
 			expectedAnnotations: nil,
 			expectErr:           false,
 		},
+		{
+			name: "multiple expressions with build-platforms and priority",
+			expressions: []string{
+				`priority("high")`,
+				`annotation("build-tool", "tekton")`,
+				`label("team", "platform")`,
+				`has(pipelineRun.spec.params) && pipelineRun.spec.params.exists(p, p.name == 'build-platforms') ?
+				pipelineRun.spec.params.filter(p, p.name == 'build-platforms')[0].value.map(
+					p,
+					annotation("kueue.konflux-ci.dev/requests-" + p, "1") 
+				) : []`,
+			},
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			initialParams: []tekv1.Param{
+				{
+					Name: "build-platforms",
+					Value: tekv1.ParamValue{
+						Type: tekv1.ParamTypeArray,
+						ArrayVal: []string{
+							"linux/arm64",
+							"linux/amd64",
+						},
+					},
+				},
+			},
+			expectedLabels: map[string]string{
+				"kueue.x-k8s.io/priority-class": "high",
+				"team":                          "platform",
+			},
+			expectedAnnotations: map[string]string{
+				"build-tool": "tekton",
+				"kueue.konflux-ci.dev/requests-linux/arm64": "1",
+				"kueue.konflux-ci.dev/requests-linux/amd64": "1",
+			},
+			expectErr: false,
+		},
 	}
 
 	for _, tt := range tests {
