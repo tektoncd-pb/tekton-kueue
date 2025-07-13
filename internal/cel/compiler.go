@@ -46,6 +46,7 @@ func createCELEnvironment() (*cel.Env, error) {
 		cel.Variable("pipelineRun", cel.MapType(cel.StringType, cel.AnyType)),
 		cel.Variable("plrNamespace", cel.StringType),
 		cel.Variable("pacEventType", cel.StringType),
+		cel.Variable("pacTestEventType", cel.StringType),
 		// Add type-safe functions for creating MutationRequests
 		createMutationFunction("annotation", MutationTypeAnnotation, mutationRequestType),
 		createMutationFunction("label", MutationTypeLabel, mutationRequestType),

@@ -169,6 +169,7 @@ cel:
     - 'annotation("tekton.dev/mutated-by", "tekton-kueue")'
     - 'annotation("tekton.dev/namespace", plrNamespace)'
     - 'annotation("tekton.dev/event-type", pacEventType)'
+    - 'annotation("tekton.dev/test-event-type", pacTestEventType)'
     - 'label("environment", "test")'
     - 'priority("medium")'
     - '[annotation("build.tekton.dev/timestamp", "2025-01-01T00:00:00Z"), label("app", "test-app")]'
@@ -181,7 +182,7 @@ tekton-kueue mutate --pipelinerun-file test-pipelinerun.yaml --config-dir config
 ```
 
 This will output the mutated PipelineRun with:
-- Applied annotations from CEL expressions (including namespace and event type)
+- Applied annotations from CEL expressions (including namespace, event type, and test event type)
 - Applied labels from CEL expressions  
 - Priority class label (`kueue.x-k8s.io/priority-class`)
 - Queue name label (`kueue.x-k8s.io/queue-name`)
@@ -198,10 +199,11 @@ The following variables are available in CEL expressions:
 - `pipelineRun`: The complete PipelineRun object as a map
 - `plrNamespace`: The namespace of the PipelineRun (shorthand for `pipelineRun.metadata.namespace`)
 - `pacEventType`: The Pipelines as Code event type (from `pipelinesascode.tekton.dev/event-type` label, empty string if not present)
+- `pacTestEventType`: The Integration test event type (from `pac.test.appstudio.openshift.io/event-type` label, empty string if not present)
 
 **Benefits of convenience variables:**
 - **Shorter syntax**: Use `plrNamespace` instead of `pipelineRun.metadata.namespace`
-- **Null safety**: `pacEventType` handles missing labels gracefully (returns empty string)
+- **Null safety**: `pacEventType` and `pacTestEventType` handle missing labels gracefully (return empty string)
 - **Better readability**: Complex expressions become more concise and readable
 
 ##### Expression Examples
@@ -225,12 +227,14 @@ cel:
     # Using convenience variables
     - 'annotation("namespace", plrNamespace)'
     - 'annotation("event-type", pacEventType)'
+    - 'annotation("test-event-type", pacTestEventType)'
     - 'priority(plrNamespace == "production" ? "high" : "low")'
     
     # Conditional mutations based on PipelineRun data
     - 'pipelineRun.metadata.namespace == "prod" ? label("priority", "high") : label("priority", "normal")'
     - 'plrNamespace == "production" ? label("environment", "prod") : label("environment", "dev")'
     - 'pacEventType == "push" ? annotation("trigger", "push-event") : annotation("trigger", "other-event")'
+    - 'pacTestEventType != "" ? label("test-type", pacTestEventType) : label("test-type", "none")'
     
     # Multiline CEL expression for multiple mutations
     # This expression applies several annotations and labels in one go
@@ -239,6 +243,7 @@ cel:
         annotation("tekton.dev/pipeline", pipelineRun.metadata.name),
         annotation("tekton.dev/namespace", plrNamespace),
         annotation("tekton.dev/event-type", pacEventType),
+        annotation("tekton.dev/test-event-type", pacTestEventType),
         label("app", "tekton-pipeline"),
         label("version", "v1"),
         priority(plrNamespace == "production" ? "high" : "low"),
@@ -250,15 +255,15 @@ cel:
 
 **What the multiline expression does:**
 
-1. **Creates annotations** from PipelineRun metadata (pipeline name, namespace, and event type)
+1. **Creates annotations** from PipelineRun metadata (pipeline name, namespace, event type, and test event type)
 2. **Adds standard labels** that apply to all PipelineRuns (`app` and `version`)
 3. **Sets priority class** based on namespace using the convenience variable `plrNamespace`
 4. **Applies conditional logic** to set the `environment` label based on the namespace
 5. **Uses YAML multiline syntax** (`|`) to make complex expressions readable
 6. **Returns a list** of mutations that are all applied together
 
-For a PipelineRun named `my-pipeline` in namespace `production` with event type `push`, this would add:
-- Annotations: `tekton.dev/pipeline: my-pipeline`, `tekton.dev/namespace: production`, `tekton.dev/event-type: push`
+For a PipelineRun named `my-pipeline` in namespace `production` with event type `push` and test event type `unit-test`, this would add:
+- Annotations: `tekton.dev/pipeline: my-pipeline`, `tekton.dev/namespace: production`, `tekton.dev/event-type: push`, `tekton.dev/test-event-type: unit-test`
 - Labels: `app: tekton-pipeline`, `version: v1`, `environment: prod`, `kueue.x-k8s.io/priority-class: high`
 
 ##### Priority Function

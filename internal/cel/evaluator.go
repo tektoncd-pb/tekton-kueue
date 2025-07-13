@@ -33,13 +33,16 @@ func (cp *CompiledProgram) Evaluate(pipelineRun *tekv1.PipelineRun) ([]*Mutation
 
 	// Create the evaluation context
 	pacEventType := ""
+	pacTestEventType := ""
 	if pipelineRun.Labels != nil {
 		pacEventType = pipelineRun.Labels["pipelinesascode.tekton.dev/event-type"]
+		pacTestEventType = pipelineRun.Labels["pac.test.appstudio.openshift.io/event-type"]
 	}
 	vars := map[string]interface{}{
 		"pipelineRun":  pipelineRunMap,
 		"plrNamespace": pipelineRun.Namespace,
 		"pacEventType": pacEventType,
+		"pacTestEventType": pacTestEventType,
 	}
 
 	// Execute the program
