@@ -8,6 +8,7 @@ resources:
 - manifests.yaml
 - service.yaml
 - config.yaml
+- default-priority-class.yaml
 
 configurations:
 - kustomizeconfig.yaml
