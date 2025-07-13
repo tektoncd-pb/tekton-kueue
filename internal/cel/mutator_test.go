@@ -3,6 +3,7 @@ package cel
 import (
 	"testing"
 
+	. "github.com/onsi/gomega"
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -58,23 +59,18 @@ func getBuildPlatformsParamsSmall() []tekv1.Param {
 }
 
 func TestNewCELMutator(t *testing.T) {
+	g := NewWithT(t)
+
 	programs, err := CompileCELPrograms([]string{
 		`annotation("test-key", "test-value")`,
 		`label("env", "production")`,
 	})
-	if err != nil {
-		t.Fatalf("Failed to compile programs: %v", err)
-	}
+	g.Expect(err).NotTo(HaveOccurred())
 
 	mutator := NewCELMutator(programs)
 
-	if mutator == nil {
-		t.Fatal("NewCELMutator returned nil")
-	}
-
-	if len(mutator.programs) != 2 {
-		t.Errorf("Expected 2 programs, got %d", len(mutator.programs))
-	}
+	g.Expect(mutator).NotTo(BeNil())
+	g.Expect(mutator.programs).To(HaveLen(2))
 }
 
 func TestCELMutator_Mutate(t *testing.T) {
@@ -490,6 +486,8 @@ func TestCELMutator_Mutate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
 			// Determine namespace to use
 			namespace := tt.namespace
 			if namespace == "" {
@@ -514,9 +512,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 
 			// Compile programs and create mutator
 			programs, err := CompileCELPrograms(tt.expressions)
-			if err != nil {
-				t.Fatalf("Failed to compile expressions: %v", err)
-			}
+			g.Expect(err).NotTo(HaveOccurred())
 
 			mutator := NewCELMutator(programs)
 
@@ -525,49 +521,41 @@ func TestCELMutator_Mutate(t *testing.T) {
 
 			// Check for expected errors
 			if tt.expectErr {
-				if err == nil {
-					t.Errorf("Expected error but got none")
-				} else if tt.errMsg != "" && !containsString(err.Error(), tt.errMsg) {
-					t.Errorf("Expected error message %q, got %q", tt.errMsg, err.Error())
+				g.Expect(err).To(HaveOccurred())
+				if tt.errMsg != "" {
+					g.Expect(err.Error()).To(ContainSubstring(tt.errMsg))
 				}
 				return
 			}
 
-			if err != nil {
-				t.Errorf("Unexpected error: %v", err)
-				return
-			}
+			g.Expect(err).NotTo(HaveOccurred())
 
 			// Verify labels
-			if !mapsEqual(pipelineRun.Labels, tt.expectedLabels) {
-				t.Errorf("Labels mismatch:\nexpected: %v\ngot: %v", tt.expectedLabels, pipelineRun.Labels)
-			}
+			g.Expect(pipelineRun.Labels).To(Equal(tt.expectedLabels))
 
 			// Verify annotations
-			if !mapsEqual(pipelineRun.Annotations, tt.expectedAnnotations) {
-				t.Errorf("Annotations mismatch:\nexpected: %v\ngot: %v", tt.expectedAnnotations, pipelineRun.Annotations)
-			}
+			g.Expect(pipelineRun.Annotations).To(Equal(tt.expectedAnnotations))
 		})
 	}
 }
 
 func TestCELMutator_Mutate_NilPipelineRun(t *testing.T) {
+	g := NewWithT(t)
+
 	programs, err := CompileCELPrograms([]string{
 		`annotation("test-key", "test-value")`,
 	})
-	if err != nil {
-		t.Fatalf("Failed to compile programs: %v", err)
-	}
+	g.Expect(err).NotTo(HaveOccurred())
 
 	mutator := NewCELMutator(programs)
 	err = mutator.Mutate(nil)
 
-	if err == nil {
-		t.Error("Expected error for nil PipelineRun but got none")
-	}
+	g.Expect(err).To(HaveOccurred())
 }
 
 func TestCELMutator_EmptyPrograms(t *testing.T) {
+	g := NewWithT(t)
+
 	mutator := NewCELMutator([]*CompiledProgram{})
 
 	pipelineRun := &tekv1.PipelineRun{
@@ -578,17 +566,11 @@ func TestCELMutator_EmptyPrograms(t *testing.T) {
 	}
 
 	err := mutator.Mutate(pipelineRun)
-	if err != nil {
-		t.Errorf("Unexpected error with empty programs: %v", err)
-	}
+	g.Expect(err).NotTo(HaveOccurred())
 
 	// Should not crash or modify the PipelineRun
-	if pipelineRun.Labels != nil {
-		t.Error("Labels should remain nil")
-	}
-	if pipelineRun.Annotations != nil {
-		t.Error("Annotations should remain nil")
-	}
+	g.Expect(pipelineRun.Labels).To(BeNil())
+	g.Expect(pipelineRun.Annotations).To(BeNil())
 }
 
 // Helper functions for testing
@@ -602,30 +584,4 @@ func copyMap(m map[string]string) map[string]string {
 		result[k] = v
 	}
 	return result
-}
-
-func mapsEqual(a, b map[string]string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k, v := range a {
-		if b[k] != v {
-			return false
-		}
-	}
-	return true
-}
-
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		(len(substr) > 0 && indexString(s, substr) >= 0))
-}
-
-func indexString(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }
