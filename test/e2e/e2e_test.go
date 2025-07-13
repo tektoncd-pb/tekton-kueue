@@ -482,9 +482,11 @@ var _ = Describe("Manager", Ordered, func() {
 					if err != nil {
 						return err
 					}
-					if wl.Spec.PriorityClassName != "tekton-kueue-default" {
+					const defaultPriorityClassName = "tekton-kueue-default"
+					if wl.Spec.PriorityClassName != defaultPriorityClassName {
 						return fmt.Errorf(
-							"Workload should have priority class tekton-kueue-default, but has %s",
+							"Workload should have priority class %s, but has %s",
+							defaultPriorityClassName,
 							wl.Spec.PriorityClassName,
 						)
 					}
