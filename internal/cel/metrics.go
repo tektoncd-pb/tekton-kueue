@@ -9,7 +9,7 @@ var (
 	// celEvaluationFailuresTotal tracks the total number of CEL evaluation failures
 	celEvaluationFailuresTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "cel_evaluation_failures_total",
+			Name: "tekton_kueue_cel_evaluation_failures_total",
 			Help: "Total number of CEL evaluation failures",
 		},
 		[]string{},

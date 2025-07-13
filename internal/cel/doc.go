@@ -129,5 +129,5 @@
 // # Metrics
 //
 // The package exposes Prometheus metrics:
-//   - cel_evaluation_failures_total: Counter for CEL evaluation failures
+//   - tekton_kueue_cel_evaluation_failures_total: Counter for CEL evaluation failures
 package cel

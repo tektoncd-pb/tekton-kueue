@@ -299,6 +299,28 @@ The priority function automatically:
 - `controller` - Run the tekton-kueue controller
 - `webhook` - Run the admission webhook server
 
+## Metrics
+
+Both controller and webhook server expose the built-in metrics provided by controller-runtime.
+In addition, the tekton-kueue webhook server exposes custom Prometheus metrics for monitoring and observability:
+
+### Available Metrics
+
+| Metric Name | Type | Description | Labels |
+|-------------|------|-------------|--------|
+| `tekton_kueue_cel_evaluation_failures_total` | Counter | Total number of CEL evaluation failures in the webhook | None |
+
+### Metrics Details
+
+#### `tekton_kueue_cel_evaluation_failures_total`
+
+- **Type**: Counter
+- **Purpose**: Tracks the total number of CEL expression evaluation failures that occur during PipelineRun mutation processing
+- **When incremented**: Each time a CEL expression fails to evaluate during webhook processing
+- **Use cases**: 
+  - Monitor the health of CEL expressions in your configuration
+  - Alert on unexpected increases in evaluation failures
+
 ## Project Distribution
 
 The project is built by [Konflux]. Images are published to [quay.io/konflux-ci/tekton-queue](quay.io/konflux-ci/tekton-queue)
