@@ -474,6 +474,18 @@ func TestCELMutator_Mutate(t *testing.T) {
 			},
 			expectErr: false,
 		},
+		{
+			name: "accessing parameter with invalid name - should fail",
+			expressions: []string{
+				"annotation('test', pipelineRun.doesNotExist)",
+			},
+			initialLabels:       nil,
+			initialAnnotations:  nil,
+			initialParams:       nil, // No parameters - should return empty array
+			expectedLabels:      nil,
+			expectedAnnotations: nil,
+			expectErr:           true,
+		},
 	}
 
 	for _, tt := range tests {
