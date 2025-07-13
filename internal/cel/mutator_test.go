@@ -34,6 +34,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 		namespace           string // optional, defaults to "test-namespace"
 		initialLabels       map[string]string
 		initialAnnotations  map[string]string
+		initialParams       []tekv1.Param // optional, for testing parameter access
 		expectedLabels      map[string]string
 		expectedAnnotations map[string]string
 		expectErr           bool
@@ -408,6 +409,56 @@ func TestCELMutator_Mutate(t *testing.T) {
 			expectedAnnotations: nil,
 			expectErr:           false,
 		},
+		{
+			name: "build-platforms parameter mapping to resource requests",
+			expressions: []string{
+				`has(pipelineRun.spec.params) && pipelineRun.spec.params.exists(p, p.name == 'build-platforms') ?
+				pipelineRun.spec.params.filter(p, p.name == 'build-platforms')[0].value.map(
+					p,
+					annotation("kueue.konflux-ci.dev/requests-" + p, "1") 
+				) : []`,
+			},
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			initialParams: []tekv1.Param{
+				{
+					Name: "build-platforms",
+					Value: tekv1.ParamValue{
+						Type: tekv1.ParamTypeArray,
+						ArrayVal: []string{
+							"linux/arm64",
+							"linux/amd64",
+							"linux/s390x",
+							"linux/ppc64le",
+						},
+					},
+				},
+			},
+			expectedLabels: nil,
+			expectedAnnotations: map[string]string{
+				"kueue.konflux-ci.dev/requests-linux/arm64":   "1",
+				"kueue.konflux-ci.dev/requests-linux/amd64":   "1",
+				"kueue.konflux-ci.dev/requests-linux/s390x":   "1",
+				"kueue.konflux-ci.dev/requests-linux/ppc64le": "1",
+			},
+			expectErr: false,
+		},
+		{
+			name: "build-platforms parameter missing - returns empty array",
+			expressions: []string{
+				`has(pipelineRun.spec.params) && pipelineRun.spec.params.exists(p, p.name == 'build-platforms') ?
+				pipelineRun.spec.params.filter(p, p.name == 'build-platforms')[0].value.map(
+					p,
+					annotation("kueue.konflux-ci.dev/requests-" + p, "1") 
+				) : []`,
+			},
+			initialLabels:       nil,
+			initialAnnotations:  nil,
+			initialParams:       nil, // No parameters - should return empty array
+			expectedLabels:      nil,
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -430,6 +481,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 					PipelineRef: &tekv1.PipelineRef{
 						Name: "test-pipeline",
 					},
+					Params: tt.initialParams,
 				},
 			}
 
