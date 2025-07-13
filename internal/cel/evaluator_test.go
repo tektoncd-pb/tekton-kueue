@@ -1,9 +1,9 @@
 package cel
 
 import (
-	"strings"
 	"testing"
 
+	. "github.com/onsi/gomega"
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -234,46 +234,29 @@ func TestCompiledProgram_Evaluate_TypeSafety(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			programs, err := CompileCELPrograms([]string{tt.expression})
-			if err != nil {
-				t.Fatalf("failed to compile expression: %v", err)
-			}
+			g := NewWithT(t)
 
-			if len(programs) != 1 {
-				t.Fatalf("expected 1 program, got %d", len(programs))
-			}
+			programs, err := CompileCELPrograms([]string{tt.expression})
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(programs).To(HaveLen(1))
 
 			mutations, err := programs[0].Evaluate(tt.pipelineRun)
 
 			if tt.expectErr {
-				if err == nil {
-					t.Errorf("expected error but got none")
-				} else if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
-					t.Errorf("expected error message %q, got %q", tt.errMsg, err.Error())
+				g.Expect(err).To(HaveOccurred())
+				if tt.errMsg != "" {
+					g.Expect(err.Error()).To(ContainSubstring(tt.errMsg))
 				}
 				return
 			}
 
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-				return
-			}
-
-			if len(mutations) != len(tt.expected) {
-				t.Errorf("expected %d mutations, got %d", len(tt.expected), len(mutations))
-				return
-			}
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(mutations).To(HaveLen(len(tt.expected)))
 
 			for i, expected := range tt.expected {
-				if mutations[i].Type != expected.Type {
-					t.Errorf("mutation %d: expected type %v, got %v", i, expected.Type, mutations[i].Type)
-				}
-				if mutations[i].Key != expected.Key {
-					t.Errorf("mutation %d: expected key %v, got %v", i, expected.Key, mutations[i].Key)
-				}
-				if mutations[i].Value != expected.Value {
-					t.Errorf("mutation %d: expected value %v, got %v", i, expected.Value, mutations[i].Value)
-				}
+				g.Expect(mutations[i].Type).To(Equal(expected.Type))
+				g.Expect(mutations[i].Key).To(Equal(expected.Key))
+				g.Expect(mutations[i].Value).To(Equal(expected.Value))
 			}
 		})
 	}
