@@ -4,4 +4,4 @@ kind: WorkloadPriorityClass
 metadata:
   name: default
 value: 0
-description: "tekton-kueue default priority"
+description: "tekton-kueue default priority class"
