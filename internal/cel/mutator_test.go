@@ -1,6 +1,7 @@
 package cel
 
 import (
+	"maps"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -499,8 +500,8 @@ func TestCELMutator_Mutate(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        "test-pipeline",
 					Namespace:   namespace,
-					Labels:      copyMap(tt.initialLabels),
-					Annotations: copyMap(tt.initialAnnotations),
+					Labels:      maps.Clone(tt.initialLabels),
+					Annotations: maps.Clone(tt.initialAnnotations),
 				},
 				Spec: tekv1.PipelineRunSpec{
 					PipelineRef: &tekv1.PipelineRef{
@@ -571,17 +572,4 @@ func TestCELMutator_EmptyPrograms(t *testing.T) {
 	// Should not crash or modify the PipelineRun
 	g.Expect(pipelineRun.Labels).To(BeNil())
 	g.Expect(pipelineRun.Annotations).To(BeNil())
-}
-
-// Helper functions for testing
-
-func copyMap(m map[string]string) map[string]string {
-	if m == nil {
-		return nil
-	}
-	result := make(map[string]string, len(m))
-	for k, v := range m {
-		result[k] = v
-	}
-	return result
 }
