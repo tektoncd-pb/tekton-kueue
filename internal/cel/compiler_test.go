@@ -85,7 +85,7 @@ func TestCompileCELPrograms_TypeSafety(t *testing.T) {
 	}
 }
 
-func TestValidateExpressionReturnType(t *testing.T) {
+func TestValidateExpressionReturnType_ValidCases(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a simple CEL environment for testing
@@ -95,55 +95,75 @@ func TestValidateExpressionReturnType(t *testing.T) {
 	tests := []struct {
 		name        string
 		expression  string
-		expectValid bool
 		description string
 	}{
 		{
 			name:        "valid single annotation",
 			expression:  `annotation("key", "value")`,
-			expectValid: true,
 			description: "Returns map<string, any> representing MutationRequest",
 		},
 		{
 			name:        "valid annotation list",
 			expression:  `[annotation("key1", "value1"), annotation("key2", "value2")]`,
-			expectValid: true,
 			description: "Returns list<map<string, any>> representing []MutationRequest",
 		},
 		{
 			name:        "valid mixed list",
 			expression:  `[annotation("key1", "value1"), label("key2", "value2")]`,
-			expectValid: true,
 			description: "Returns list<map<string, any>> with mixed mutation types",
 		},
 		{
 			name:        "valid priority function",
 			expression:  `priority("high")`,
-			expectValid: true,
 			description: "Returns map<string, any> representing priority MutationRequest",
 		},
 		{
 			name:        "valid priority in list",
 			expression:  `[priority("medium"), annotation("queue", "default")]`,
-			expectValid: true,
 			description: "Returns list<map<string, any>> with priority and annotation",
 		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			// Compile the expression
+			ast, issues := env.Compile(tt.expression)
+			g.Expect(issues.Err()).NotTo(HaveOccurred(), "Expression should compile successfully")
+
+			// Validate the return type
+			err := validateExpressionReturnType(ast)
+			g.Expect(err).NotTo(HaveOccurred(), tt.description)
+		})
+	}
+}
+
+func TestValidateExpressionReturnType_InvalidCases(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a simple CEL environment for testing
+	env, err := createCELEnvironment()
+	g.Expect(err).NotTo(HaveOccurred())
+
+	tests := []struct {
+		name        string
+		expression  string
+		description string
+	}{
 		{
 			name:        "invalid string return",
 			expression:  `"just a string"`,
-			expectValid: false,
 			description: "Returns string instead of MutationRequest structure",
 		},
 		{
 			name:        "invalid number return",
 			expression:  `42`,
-			expectValid: false,
 			description: "Returns number instead of MutationRequest structure",
 		},
 		{
 			name:        "invalid list of strings",
 			expression:  `["string1", "string2"]`,
-			expectValid: false,
 			description: "Returns list<string> instead of list<map<string, any>>",
 		},
 	}
@@ -154,21 +174,11 @@ func TestValidateExpressionReturnType(t *testing.T) {
 
 			// Compile the expression
 			ast, issues := env.Compile(tt.expression)
-			if issues != nil && issues.Err() != nil {
-				if tt.expectValid {
-					g.Expect(issues.Err()).NotTo(HaveOccurred(), "Expression should compile but failed")
-				}
-				return
-			}
+			g.Expect(issues.Err()).NotTo(HaveOccurred(), "Expression should compile successfully")
 
 			// Validate the return type
 			err := validateExpressionReturnType(ast)
-
-			if tt.expectValid {
-				g.Expect(err).NotTo(HaveOccurred())
-			} else {
-				g.Expect(err).To(HaveOccurred())
-			}
+			g.Expect(err).To(HaveOccurred(), tt.description)
 		})
 	}
 }
