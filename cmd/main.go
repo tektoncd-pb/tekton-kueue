@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"flag"
@@ -28,6 +29,7 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/yaml"
+	outputyaml "sigs.k8s.io/yaml"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -46,6 +48,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"github.com/konflux-ci/tekton-queue/internal/cel"
 	kueueconfig "github.com/konflux-ci/tekton-queue/internal/config"
 	"github.com/konflux-ci/tekton-queue/internal/controller"
 	webhookv1 "github.com/konflux-ci/tekton-queue/internal/webhook/v1"
@@ -146,8 +149,25 @@ func (w *WebhookFlags) AddFlags(fs *flag.FlagSet) {
 	fs.StringVar(&w.WebhookCertKey, "webhook-cert-key", "tls.key", "The name of the webhook key file.")
 }
 
+type MutateFlags struct {
+	PipelineRunFile string
+	ConfigDir       string
+	ZapOptions      *zap.Options
+}
+
+func (m *MutateFlags) AddFlags(fs *flag.FlagSet) {
+	fs.StringVar(&m.PipelineRunFile, "pipelinerun-file", "",
+		"Path to the file containing the PipelineRun definition (required)")
+	fs.StringVar(&m.ConfigDir, "config-dir", "",
+		"The directory that contains the configuration file for the tekton-kueue (required)")
+	m.ZapOptions = &zap.Options{
+		Development: true,
+	}
+	m.ZapOptions.BindFlags(fs)
+}
+
 func main() {
-	expectedSubcommands := "expected 'controller' or 'webhook' subcommand"
+	expectedSubcommands := "expected 'controller', 'webhook', or 'mutate' subcommand"
 	if len(os.Args) < 2 {
 		fmt.Println(expectedSubcommands)
 		os.Exit(1)
@@ -158,6 +178,8 @@ func main() {
 		runController(os.Args[2:])
 	case "webhook":
 		runWebhook(os.Args[2:])
+	case "mutate":
+		runMutate(os.Args[2:])
 	default:
 		fmt.Printf("Got subcommand %s, %s", os.Args[1], expectedSubcommands)
 		os.Exit(1)
@@ -265,7 +287,14 @@ func runWebhook(args []string) {
 		os.Exit(1)
 	}
 
-	customDefaulter, err := webhookv1.NewCustomDefaulter(cfg.QueueName)
+	programs, err := cel.CompileCELPrograms(cfg.CEL.Expressions)
+	if err != nil {
+		setupLog.Error(err, "unable to compile CEL programs")
+		os.Exit(1)
+	}
+	mutator := cel.NewCELMutator(programs)
+
+	customDefaulter, err := webhookv1.NewCustomDefaulter(cfg.QueueName, []webhookv1.PipelineRunMutator{mutator})
 	if err != nil {
 		setupLog.Error(err, "Unable to create custom defaulter for webhook")
 		os.Exit(1)
@@ -293,6 +322,78 @@ func runWebhook(args []string) {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func runMutate(args []string) {
+	fs := flag.NewFlagSet("mutate", flag.ExitOnError)
+	var mutateFlags MutateFlags
+	mutateFlags.AddFlags(fs)
+
+	parseFlagsOrDie(fs, args)
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(mutateFlags.ZapOptions)))
+
+	// Validate required flags
+	if mutateFlags.PipelineRunFile == "" {
+		fmt.Fprintf(os.Stderr, "Error: --pipelinerun-file is required\n")
+		fs.Usage()
+		os.Exit(1)
+	}
+	if mutateFlags.ConfigDir == "" {
+		fmt.Fprintf(os.Stderr, "Error: --config-dir is required\n")
+		fs.Usage()
+		os.Exit(1)
+	}
+
+	// Load PipelineRun from file
+	pipelineRunData, err := os.ReadFile(mutateFlags.PipelineRunFile)
+	if err != nil {
+		setupLog.Error(err, "Failed to read PipelineRun file", "file", mutateFlags.PipelineRunFile)
+		os.Exit(1)
+	}
+
+	var pipelineRun tekv1.PipelineRun
+	if err := yaml.Unmarshal(pipelineRunData, &pipelineRun); err != nil {
+		setupLog.Error(err, "Failed to parse PipelineRun YAML", "file", mutateFlags.PipelineRunFile)
+		os.Exit(1)
+	}
+
+	// Load config
+	cfg, err := loadConfig(mutateFlags.ConfigDir)
+	if err != nil {
+		setupLog.Error(err, "unable to load configuration")
+		os.Exit(1)
+	}
+
+	// Compile CEL programs and create mutator
+	programs, err := cel.CompileCELPrograms(cfg.CEL.Expressions)
+	if err != nil {
+		setupLog.Error(err, "unable to compile CEL programs")
+		os.Exit(1)
+	}
+	mutator := cel.NewCELMutator(programs)
+
+	// Create custom defaulter
+	customDefaulter, err := webhookv1.NewCustomDefaulter(cfg.QueueName, []webhookv1.PipelineRunMutator{mutator})
+	if err != nil {
+		setupLog.Error(err, "Unable to create custom defaulter")
+		os.Exit(1)
+	}
+
+	// Apply mutation
+	ctx := context.Background()
+	if err := customDefaulter.Default(ctx, &pipelineRun); err != nil {
+		setupLog.Error(err, "Failed to apply mutation to PipelineRun")
+		os.Exit(1)
+	}
+
+	// Output the mutated PipelineRun as YAML
+	mutatedData, err := outputyaml.Marshal(&pipelineRun)
+	if err != nil {
+		setupLog.Error(err, "Failed to marshal mutated PipelineRun to YAML")
+		os.Exit(1)
+	}
+
+	fmt.Print(string(mutatedData))
 }
 
 func getTLSOpts(s *SharedFlags) []func(*tls.Config) {

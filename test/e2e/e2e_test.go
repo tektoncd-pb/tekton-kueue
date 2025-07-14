@@ -478,7 +478,18 @@ var _ = Describe("Manager", Ordered, func() {
 			for i := range plrCount {
 				plr := plrs[i]
 				Eventually(func() error {
-					_, err := GetOwnedWorkload(k8sClient, plr, ctx)
+					wl, err := GetOwnedWorkload(k8sClient, plr, ctx)
+					if err != nil {
+						return err
+					}
+					const defaultPriorityClassName = "tekton-kueue-default"
+					if wl.Spec.PriorityClassName != defaultPriorityClassName {
+						return fmt.Errorf(
+							"Workload should have priority class %s, but has %s",
+							defaultPriorityClassName,
+							wl.Spec.PriorityClassName,
+						)
+					}
 					return err
 				},
 					15*time.Second,
