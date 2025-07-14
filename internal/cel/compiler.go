@@ -138,8 +138,8 @@ func isValidOutputType(outputType *cel.Type) bool {
 	}
 }
 
-// ValidateExpressionReturnType validates that a CEL expression returns the expected type
-func ValidateExpressionReturnType(ast *cel.Ast) error {
+// validateExpressionReturnType validates that a CEL expression returns the expected type
+func validateExpressionReturnType(ast *cel.Ast) error {
 	if !isValidOutputType(ast.OutputType()) {
 		return fmt.Errorf("expression must return MutationRequest-compatible map<string, any> or list<map<string, any>>, got %v", ast.OutputType())
 	}
@@ -155,7 +155,7 @@ func compileSingleExpression(env *cel.Env, expression string) (*CompiledProgram,
 	}
 
 	// Validate the output type matches our expected return types
-	if err := ValidateExpressionReturnType(ast); err != nil {
+	if err := validateExpressionReturnType(ast); err != nil {
 		return nil, fmt.Errorf("invalid return type for expression %q: %w", expression, err)
 	}
 

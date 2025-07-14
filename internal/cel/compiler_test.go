@@ -162,7 +162,7 @@ func TestValidateExpressionReturnType(t *testing.T) {
 			}
 
 			// Validate the return type
-			err := ValidateExpressionReturnType(ast)
+			err := validateExpressionReturnType(ast)
 
 			if tt.expectValid {
 				g.Expect(err).NotTo(HaveOccurred())
