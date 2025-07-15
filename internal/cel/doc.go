@@ -128,6 +128,7 @@
 //  2. Runtime input: Validates PipelineRun is not nil and properly structured
 //  3. Runtime output: Validates returned data has correct MutationRequest structure
 //  4. Field validation: Validates all required fields (type, key, value) are present and valid
+//  5. Kubernetes validation: Uses official k8s.io/apimachinery validation for annotation and label keys
 //
 // # Error Handling
 //
