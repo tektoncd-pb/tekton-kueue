@@ -2,6 +2,7 @@ package cel
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
@@ -51,6 +52,8 @@ func createCELEnvironment() (*cel.Env, error) {
 		createMutationFunction("annotation", MutationTypeAnnotation, mutationRequestType),
 		createMutationFunction("label", MutationTypeLabel, mutationRequestType),
 		createPriorityMutationFunction("priority", mutationRequestType),
+		// Add string manipulation functions
+		createReplaceFunction("replace"),
 
 		// Enable standard library functions
 		cel.StdLib(),
@@ -119,6 +122,34 @@ func createPriorityMutationFunction(name string, returnType *cel.Type) cel.EnvOp
 				}
 
 				return types.NewStringInterfaceMap(types.DefaultTypeAdapter, mutationMap)
+			}),
+		),
+	)
+}
+
+// createReplaceFunction creates a CEL function for string replacement
+func createReplaceFunction(name string) cel.EnvOption {
+	return cel.Function(
+		name,
+		cel.Overload(
+			name+"_string_string_string_to_string",
+			[]*cel.Type{cel.StringType, cel.StringType, cel.StringType},
+			cel.StringType,
+			cel.FunctionBinding(func(args ...ref.Val) ref.Val {
+				if len(args) != 3 {
+					return types.NewErr("%s function requires exactly 3 arguments", name)
+				}
+
+				source, sourceOk := args[0].Value().(string)
+				search, searchOk := args[1].Value().(string)
+				replacement, replacementOk := args[2].Value().(string)
+
+				if !sourceOk || !searchOk || !replacementOk {
+					return types.NewErr("%s function requires string arguments", name)
+				}
+
+				result := strings.ReplaceAll(source, search, replacement)
+				return types.String(result)
 			}),
 		),
 	)

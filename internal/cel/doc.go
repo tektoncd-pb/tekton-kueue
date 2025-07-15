@@ -74,6 +74,9 @@
 //   - priority(value: string) -> MutationRequest
 //     Creates a label mutation with key "kueue.x-k8s.io/priority-class" and the specified value
 //
+//   - replace(source: string, search: string, replacement: string) -> string
+//     Replaces all occurrences of search string with replacement string in the source string
+//
 // # Available CEL Variables
 //
 //   - pipelineRun: map<string, any> - The full PipelineRun object as a CEL-accessible map
@@ -99,6 +102,14 @@
 //	              pipelineRun.spec.params.exists(p, p.name == "build-platforms") ?
 //	              pipelineRun.spec.params.filter(p, p.name == "build-platforms")[0].value.map(
 //	                  p, annotation("kueue.konflux-ci.dev/requests-" + p, "1")
+//	              ) : []`
+//
+// Using string manipulation with replace function:
+//
+//	expression := `has(pipelineRun.spec.params) &&
+//	              pipelineRun.spec.params.exists(p, p.name == "build-platforms") ?
+//	              pipelineRun.spec.params.filter(p, p.name == "build-platforms")[0].value.map(
+//	                  p, annotation("kueue.konflux-ci.dev/requests-" + replace(p, "/", "-"), "1")
 //	              ) : []`
 //
 // # Package Structure

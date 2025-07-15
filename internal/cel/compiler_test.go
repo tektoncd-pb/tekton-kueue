@@ -192,3 +192,64 @@ func TestCompiledProgram_GetExpression(t *testing.T) {
 	g.Expect(programs).To(HaveLen(1))
 	g.Expect(programs[0].GetExpression()).To(Equal(expression))
 }
+
+func TestReplaceFunction(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a CEL environment for testing
+	env, err := createCELEnvironment()
+	g.Expect(err).NotTo(HaveOccurred())
+
+	tests := []struct {
+		name       string
+		expression string
+		expected   string
+	}{
+		{
+			name:       "replace forward slash with dash",
+			expression: `replace("linux/amd64", "/", "-")`,
+			expected:   "linux-amd64",
+		},
+		{
+			name:       "replace multiple occurrences",
+			expression: `replace("hello world hello", "hello", "hi")`,
+			expected:   "hi world hi",
+		},
+		{
+			name:       "replace with empty string",
+			expression: `replace("test-value", "-", "")`,
+			expected:   "testvalue",
+		},
+		{
+			name:       "replace non-existent character",
+			expression: `replace("test", "x", "y")`,
+			expected:   "test",
+		},
+		{
+			name:       "replace entire string",
+			expression: `replace("old", "old", "new")`,
+			expected:   "new",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			// Compile the expression
+			ast, issues := env.Compile(tt.expression)
+			g.Expect(issues.Err()).NotTo(HaveOccurred(), "Expression should compile successfully")
+
+			// Create program and evaluate
+			program, err := env.Program(ast)
+			g.Expect(err).NotTo(HaveOccurred(), "Program creation should succeed")
+
+			// Evaluate the expression
+			result, _, err := program.Eval(map[string]interface{}{})
+			g.Expect(err).NotTo(HaveOccurred(), "Evaluation should succeed")
+
+			// Check the result
+			g.Expect(result.Value()).To(Equal(tt.expected))
+		})
+	}
+}

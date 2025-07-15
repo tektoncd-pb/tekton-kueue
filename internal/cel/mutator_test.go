@@ -22,7 +22,7 @@ const (
 	buildPlatformsExpression = `has(pipelineRun.spec.params) && pipelineRun.spec.params.exists(p, p.name == 'build-platforms') ?
 				pipelineRun.spec.params.filter(p, p.name == 'build-platforms')[0].value.map(
 					p,
-					annotation("kueue.konflux-ci.dev/requests-" + p, "1") 
+					annotation("kueue.konflux-ci.dev/requests-" + replace(p, "/", "-"), "1") 
 				) : []`
 )
 
@@ -430,10 +430,10 @@ func TestCELMutator_Mutate(t *testing.T) {
 			initialParams:      getBuildPlatformsParams(),
 			expectedLabels:     nil,
 			expectedAnnotations: map[string]string{
-				"kueue.konflux-ci.dev/requests-linux/arm64":   "1",
-				"kueue.konflux-ci.dev/requests-linux/amd64":   "1",
-				"kueue.konflux-ci.dev/requests-linux/s390x":   "1",
-				"kueue.konflux-ci.dev/requests-linux/ppc64le": "1",
+				"kueue.konflux-ci.dev/requests-linux-arm64":   "1",
+				"kueue.konflux-ci.dev/requests-linux-amd64":   "1",
+				"kueue.konflux-ci.dev/requests-linux-s390x":   "1",
+				"kueue.konflux-ci.dev/requests-linux-ppc64le": "1",
 			},
 			expectErr: false,
 		},
@@ -466,8 +466,8 @@ func TestCELMutator_Mutate(t *testing.T) {
 			},
 			expectedAnnotations: map[string]string{
 				"build-tool": "tekton",
-				"kueue.konflux-ci.dev/requests-linux/arm64": "1",
-				"kueue.konflux-ci.dev/requests-linux/amd64": "1",
+				"kueue.konflux-ci.dev/requests-linux-arm64": "1",
+				"kueue.konflux-ci.dev/requests-linux-amd64": "1",
 			},
 			expectErr: false,
 		},
