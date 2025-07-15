@@ -1,9 +1,21 @@
 package cel
 
 import (
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
+)
+
+const (
+	// Kubernetes label value length limit
+	maxLabelValueLength = 63
+
+	// Kubernetes label key length limit (for the part after the prefix)
+	maxLabelKeyLength = 63
+
+	// Kubernetes domain prefix length limit
+	maxDomainPrefixLength = 253
 )
 
 func TestCompileCELPrograms_TypeSafety(t *testing.T) {
@@ -252,4 +264,263 @@ func TestReplaceFunction(t *testing.T) {
 			g.Expect(result.Value()).To(Equal(tt.expected))
 		})
 	}
+}
+
+func TestKubernetesKeyValidation(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a CEL environment for testing
+	env, err := createCELEnvironment()
+	g.Expect(err).NotTo(HaveOccurred())
+
+	tests := []struct {
+		name        string
+		expression  string
+		expectError bool
+		errorMsg    string
+	}{
+		// Valid annotation keys
+		{
+			name:        "valid annotation key without prefix",
+			expression:  `annotation("simple-key", "value")`,
+			expectError: false,
+		},
+		{
+			name:        "valid annotation key with prefix",
+			expression:  `annotation("example.com/my-key", "value")`,
+			expectError: false,
+		},
+		{
+			name:        "valid annotation key with complex prefix",
+			expression:  `annotation("sub.domain.example.com/my-key", "value")`,
+			expectError: false,
+		},
+		// Valid label keys
+		{
+			name:        "valid label key without prefix",
+			expression:  `label("app", "value")`,
+			expectError: false,
+		},
+		{
+			name:        "valid label key with prefix",
+			expression:  `label("kubernetes.io/os", "value")`,
+			expectError: false,
+		},
+		// Invalid annotation keys
+		{
+			name:        "invalid annotation key - starts with dash",
+			expression:  `annotation("-invalid", "value")`,
+			expectError: true,
+			errorMsg:    "annotation key validation failed",
+		},
+		{
+			name:        "invalid annotation key - ends with dash",
+			expression:  `annotation("invalid-", "value")`,
+			expectError: true,
+			errorMsg:    "annotation key validation failed",
+		},
+		{
+			name:        "invalid annotation key - too long name",
+			expression:  `annotation("` + strings.Repeat("a", maxLabelKeyLength+1) + `", "value")`,
+			expectError: true,
+			errorMsg:    "annotation key validation failed",
+		},
+		{
+			name:        "invalid annotation key - multiple slashes",
+			expression:  `annotation("domain.com/path/invalid", "value")`,
+			expectError: true,
+			errorMsg:    "annotation key validation failed",
+		},
+		{
+			name:        "invalid annotation key - invalid prefix",
+			expression:  `annotation("invalid-.com/key", "value")`,
+			expectError: true,
+			errorMsg:    "annotation key validation failed",
+		},
+		{
+			name:        "invalid annotation key - prefix too long",
+			expression:  `annotation("` + strings.Repeat("a", maxDomainPrefixLength+1) + `.com/key", "value")`,
+			expectError: true,
+			errorMsg:    "annotation key validation failed",
+		},
+		// Invalid label keys
+		{
+			name:        "invalid label key - starts with dash",
+			expression:  `label("-invalid", "value")`,
+			expectError: true,
+			errorMsg:    "label key validation failed",
+		},
+		{
+			name:        "invalid label key - ends with dash",
+			expression:  `label("invalid-", "value")`,
+			expectError: true,
+			errorMsg:    "label key validation failed",
+		},
+		{
+			name:        "invalid label key - too long name",
+			expression:  `label("` + strings.Repeat("a", maxLabelKeyLength+1) + `", "value")`,
+			expectError: true,
+			errorMsg:    "label key validation failed",
+		},
+		{
+			name:        "invalid label key - multiple slashes",
+			expression:  `label("domain.com/path/invalid", "value")`,
+			expectError: true,
+			errorMsg:    "label key validation failed",
+		},
+		{
+			name:        "invalid label key - invalid prefix",
+			expression:  `label("invalid-.com/key", "value")`,
+			expectError: true,
+			errorMsg:    "label key validation failed",
+		},
+		{
+			name:        "invalid label key - prefix too long",
+			expression:  `label("` + strings.Repeat("a", maxDomainPrefixLength+1) + `.com/key", "value")`,
+			expectError: true,
+			errorMsg:    "label key validation failed",
+		},
+		// Invalid label values
+		{
+			name:        "invalid label value - starts with dash",
+			expression:  `label("valid-key", "-invalid")`,
+			expectError: true,
+			errorMsg:    "label value validation failed",
+		},
+		{
+			name:        "invalid label value - ends with dash",
+			expression:  `label("valid-key", "invalid-")`,
+			expectError: true,
+			errorMsg:    "label value validation failed",
+		},
+		{
+			name:        "invalid label value - too long",
+			expression:  `label("valid-key", "` + strings.Repeat("a", maxLabelValueLength+1) + `")`,
+			expectError: true,
+			errorMsg:    "label value validation failed",
+		},
+		{
+			name:        "invalid label value - contains invalid characters",
+			expression:  `label("valid-key", "invalid/value")`,
+			expectError: true,
+			errorMsg:    "label value validation failed",
+		},
+		{
+			name:        "invalid label value - contains spaces",
+			expression:  `label("valid-key", "invalid value")`,
+			expectError: true,
+			errorMsg:    "label value validation failed",
+		},
+		{
+			name:        "valid label value - empty",
+			expression:  `label("valid-key", "")`,
+			expectError: false,
+		},
+		{
+			name:        "valid label value - alphanumeric",
+			expression:  `label("valid-key", "valid123")`,
+			expectError: false,
+		},
+		{
+			name:        "valid label value - with dashes underscores dots",
+			expression:  `label("valid-key", "valid-value_with.dots")`,
+			expectError: false,
+		},
+		// Invalid annotation values - removed due to CEL expression size limits
+		{
+			name:        "valid annotation value - empty",
+			expression:  `annotation("valid-key", "")`,
+			expectError: false,
+		},
+		{
+			name:        "valid annotation value - with special characters",
+			expression:  `annotation("valid-key", "value with spaces and special chars: !@#$%^&*()")`,
+			expectError: false,
+		},
+		{
+			name:        "valid annotation value - unicode",
+			expression:  `annotation("valid-key", "测试中文字符 🚀")`,
+			expectError: false,
+		},
+		{
+			name:        "valid annotation value - multiline",
+			expression:  `annotation("valid-key", "line1\nline2\nline3")`,
+			expectError: false,
+		},
+		// Note: Large annotation value testing is done in TestValidationFunctions
+		// to avoid CEL expression size limits
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			// Compile the expression
+			ast, issues := env.Compile(tt.expression)
+			g.Expect(issues.Err()).NotTo(HaveOccurred(), "Expression should compile successfully")
+
+			// Create program and evaluate
+			program, err := env.Program(ast)
+			g.Expect(err).NotTo(HaveOccurred(), "Program creation should succeed")
+
+			// Evaluate the expression
+			result, _, err := program.Eval(map[string]interface{}{})
+
+			if tt.expectError {
+				g.Expect(err).To(HaveOccurred(), "Expected evaluation to fail")
+				g.Expect(err.Error()).To(ContainSubstring(tt.errorMsg))
+			} else {
+				g.Expect(err).NotTo(HaveOccurred(), "Expected evaluation to succeed")
+				g.Expect(result).NotTo(BeNil(), "Expected valid result")
+			}
+		})
+	}
+}
+
+func TestValidationFunctions(t *testing.T) {
+	g := NewWithT(t)
+
+	// Test validateLabelValue
+	t.Run("validateLabelValue", func(t *testing.T) {
+		// Valid label values
+		g.Expect(validateLabelValue("")).To(Succeed())
+		g.Expect(validateLabelValue("valid123")).To(Succeed())
+		g.Expect(validateLabelValue("valid-value_with.dots")).To(Succeed())
+
+		// Invalid label values
+		err := validateLabelValue("-invalid")
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("label value"))
+
+		err = validateLabelValue("invalid-")
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("label value"))
+
+		err = validateLabelValue(strings.Repeat("a", maxLabelValueLength+1))
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("label value"))
+
+		err = validateLabelValue("invalid/value")
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("label value"))
+	})
+
+	// Test validateAnnotationValue
+	t.Run("validateAnnotationValue", func(t *testing.T) {
+		// Valid annotation values
+		g.Expect(validateAnnotationValue("")).To(Succeed())
+		g.Expect(validateAnnotationValue("valid value with spaces")).To(Succeed())
+		g.Expect(validateAnnotationValue("测试中文字符 🚀")).To(Succeed())
+		g.Expect(validateAnnotationValue("line1\nline2\nline3")).To(Succeed())
+		g.Expect(validateAnnotationValue(strings.Repeat("a", maxAnnotationValueSize))).To(Succeed())
+
+		// Invalid annotation value - too long
+		err := validateAnnotationValue(strings.Repeat("a", maxAnnotationValueSize+1))
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(And(
+			ContainSubstring("annotation value is too long"),
+			ContainSubstring("262145 bytes"),
+			ContainSubstring("maximum allowed is 262144 bytes"),
+		))
+	})
 }

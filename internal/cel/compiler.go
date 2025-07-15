@@ -7,7 +7,12 @@ import (
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
+	"k8s.io/apimachinery/pkg/util/validation"
 )
+
+// Annotation values can be up to 256KB and contain any UTF-8 characters
+// The main constraint is the size limit
+const maxAnnotationValueSize = 256 * 1024 // 256KB
 
 // CompileCELPrograms compiles a list of CEL expressions into type-safe programs
 func CompileCELPrograms(expressions []string) ([]*CompiledProgram, error) {
@@ -84,6 +89,31 @@ func createMutationFunction(name string, mutationType MutationType, returnType *
 
 				if key == "" {
 					return types.NewErr("%s key cannot be empty", name)
+				}
+
+				// Validate key based on mutation type
+				var err error
+				switch mutationType {
+				case MutationTypeAnnotation:
+					err = validateKey(key, "annotation")
+				case MutationTypeLabel:
+					err = validateKey(key, "label")
+				}
+
+				if err != nil {
+					return types.NewErr("%s key validation failed: %v", name, err)
+				}
+
+				// Validate value based on mutation type
+				switch mutationType {
+				case MutationTypeAnnotation:
+					err = validateAnnotationValue(value)
+				case MutationTypeLabel:
+					err = validateLabelValue(value)
+				}
+
+				if err != nil {
+					return types.NewErr("%s value validation failed: %v", name, err)
 				}
 
 				// Create strongly-typed MutationRequest structure as map
@@ -201,4 +231,39 @@ func compileSingleExpression(env *cel.Env, expression string) (*CompiledProgram,
 		ast:        ast,
 		expression: expression,
 	}, nil
+}
+
+// validateKey validates that a key conforms to Kubernetes constraints
+// keyType should be "label" or "annotation" for error messages
+func validateKey(key, keyType string) error {
+	if key == "" {
+		return fmt.Errorf("%s key cannot be empty", keyType)
+	}
+
+	// Use official Kubernetes validation for keys
+	// Both labels and annotations use the same qualified name validation
+	if errs := validation.IsQualifiedName(key); len(errs) > 0 {
+		return fmt.Errorf("%s key '%s' is invalid: %s", keyType, key, strings.Join(errs, ", "))
+	}
+
+	return nil
+}
+
+// validateLabelValue validates that a label value conforms to Kubernetes constraints
+func validateLabelValue(value string) error {
+	// Use official Kubernetes validation for label values
+	if errs := validation.IsValidLabelValue(value); len(errs) > 0 {
+		return fmt.Errorf("label value '%s' is invalid: %s", value, strings.Join(errs, ", "))
+	}
+
+	return nil
+}
+
+// validateAnnotationValue validates that an annotation value conforms to Kubernetes constraints
+func validateAnnotationValue(value string) error {
+	if len(value) > maxAnnotationValueSize {
+		return fmt.Errorf("annotation value is too long: %d bytes, maximum allowed is %d bytes", len(value), maxAnnotationValueSize)
+	}
+
+	return nil
 }
