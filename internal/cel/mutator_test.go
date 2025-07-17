@@ -11,19 +11,49 @@ import (
 
 // Common test constants to reduce duplication
 const (
-	complexPriorityExpression = `pacEventType == 'push' ? priority('push') :
-				pacEventType == 'pull_request' ? priority('pull-request') :
-				pacTestEventType == 'push' ? priority('push') :
-				pacTestEventType == 'pull_request' ? priority('pull-request') :
-				plrNamespace == 'rhtap-releng-tenant' ? priority('release') :
-				plrNamespace == 'mintmaker' ? priority('dependency-update') :
-				priority('default')`
+	complexPriorityExpression = `pacEventType == 'push' ? priority('konflux-post-merge-build') :
+		pacEventType == 'pull_request' ? priority('konflux-pre-merge-build') :
+		pacTestEventType == 'push' ? priority('konflux-post-merge-test') :
+		pacTestEventType == 'pull_request' ? priority('konflux-pre-merge-test') :
 
-	buildPlatformsExpression = `has(pipelineRun.spec.params) && pipelineRun.spec.params.exists(p, p.name == 'build-platforms') ?
-				pipelineRun.spec.params.filter(p, p.name == 'build-platforms')[0].value.map(
-					p,
-					annotation("kueue.konflux-ci.dev/requests-" + replace(p, "/", "-"), "1") 
-				) : []`
+		has(pipelineRun.metadata.labels) &&
+		'appstudio.openshift.io/service' in pipelineRun.metadata.labels &&
+		pipelineRun.metadata.labels['appstudio.openshift.io/service'] == 'release' &&
+		'pipelines.appstudio.openshift.io/type' in pipelineRun.metadata.labels &&
+		pipelineRun.metadata.labels['pipelines.appstudio.openshift.io/type'] == 'managed' ?
+		priority('konflux-release') :
+
+		has(pipelineRun.metadata.labels) &&
+		'appstudio.openshift.io/service' in pipelineRun.metadata.labels &&
+		pipelineRun.metadata.labels['appstudio.openshift.io/service'] == 'release' &&
+		'pipelines.appstudio.openshift.io/type' in pipelineRun.metadata.labels &&
+		pipelineRun.metadata.labels['pipelines.appstudio.openshift.io/type'] == 'tenant' ?
+		priority('konflux-tenant-release') :
+
+		plrNamespace == 'mintmaker' ? priority('konflux-dependency-update') :
+		priority('konflux-default')`
+
+	buildPlatformsExpression = `has(pipelineRun.spec.params) &&
+		pipelineRun.spec.params.exists(p, p.name == 'build-platforms') ?
+		pipelineRun.spec.params.filter(
+		  p, 
+		  p.name == 'build-platforms')[0]
+		.value.map(
+		  p,
+		  annotation("kueue.konflux-ci.dev/requests-" + replace(p, "/", "-"), "1") 
+		) : []`
+
+	oldStylePlatformsExpression = `has(pipelineRun.spec.pipelineSpec) &&
+		pipelineRun.spec.pipelineSpec.tasks.size() > 0 ?
+		pipelineRun.spec.pipelineSpec.tasks.map(
+		  task,
+		  has(task.params) ? task.params.filter(p, p.name == 'PLATFORM') : []
+		)
+		.filter(p, p.size() > 0)
+		.map(
+		  p,
+		  annotation("kueue.konflux-ci.dev/requests-" + replace(p[0].value, "/", "-"), "1")
+		) : []`
 )
 
 // Common test data helpers
@@ -59,6 +89,62 @@ func getBuildPlatformsParamsSmall() []tekv1.Param {
 	}
 }
 
+// Helper function to create pipeline tasks with PLATFORM parameters
+func getPipelineTasksWithPlatforms() []tekv1.PipelineTask {
+	return []tekv1.PipelineTask{
+		{
+			Name: "build-arm64",
+			Params: []tekv1.Param{
+				{
+					Name:  "PLATFORM",
+					Value: tekv1.ParamValue{Type: tekv1.ParamTypeString, StringVal: "linux/arm64"},
+				},
+			},
+		},
+		{
+			Name: "build-amd64",
+			Params: []tekv1.Param{
+				{
+					Name:  "PLATFORM",
+					Value: tekv1.ParamValue{Type: tekv1.ParamTypeString, StringVal: "linux/amd64"},
+				},
+			},
+		},
+		{
+			Name: "build-s390x",
+			Params: []tekv1.Param{
+				{
+					Name:  "PLATFORM",
+					Value: tekv1.ParamValue{Type: tekv1.ParamTypeString, StringVal: "linux/s390x"},
+				},
+			},
+		},
+		{
+			Name: "no-platform-task",
+			// No PLATFORM parameter
+		},
+	}
+}
+
+// Helper function to create pipeline tasks without PLATFORM parameters
+func getPipelineTasksWithoutPlatforms() []tekv1.PipelineTask {
+	return []tekv1.PipelineTask{
+		{
+			Name: "setup",
+			Params: []tekv1.Param{
+				{
+					Name:  "VERSION",
+					Value: tekv1.ParamValue{Type: tekv1.ParamTypeString, StringVal: "1.0"},
+				},
+			},
+		},
+		{
+			Name: "cleanup",
+			// No parameters
+		},
+	}
+}
+
 func TestNewCELMutator(t *testing.T) {
 	g := NewWithT(t)
 
@@ -81,7 +167,8 @@ func TestCELMutator_Mutate(t *testing.T) {
 		namespace           string // optional, defaults to "test-namespace"
 		initialLabels       map[string]string
 		initialAnnotations  map[string]string
-		initialParams       []tekv1.Param // optional, for testing parameter access
+		initialParams       []tekv1.Param       // optional, for testing parameter access
+		pipelineSpec        *tekv1.PipelineSpec // optional, for testing pipeline spec scenarios
 		expectedLabels      map[string]string
 		expectedAnnotations map[string]string
 		expectErr           bool
@@ -331,97 +418,22 @@ func TestCELMutator_Mutate(t *testing.T) {
 			},
 			expectErr: false,
 		},
+
 		{
-			name: "complex priority expression - push event",
+			name: "accessing parameter with invalid name - should fail",
 			expressions: []string{
-				complexPriorityExpression,
+				"annotation('test', pipelineRun.doesNotExist)",
 			},
-			initialLabels: map[string]string{
-				"pipelinesascode.tekton.dev/event-type": "push",
-			},
-			initialAnnotations: nil,
-			expectedLabels: map[string]string{
-				"pipelinesascode.tekton.dev/event-type": "push",
-				"kueue.x-k8s.io/priority-class":         "push",
-			},
+			initialLabels:       nil,
+			initialAnnotations:  nil,
+			initialParams:       nil, // No parameters - should return empty array
+			expectedLabels:      nil,
 			expectedAnnotations: nil,
-			expectErr:           false,
+			expectErr:           true,
 		},
+		// Config.yaml expression tests
 		{
-			name: "complex priority expression - pull request event",
-			expressions: []string{
-				complexPriorityExpression,
-			},
-			initialLabels: map[string]string{
-				"pipelinesascode.tekton.dev/event-type": "pull_request",
-			},
-			initialAnnotations: nil,
-			expectedLabels: map[string]string{
-				"pipelinesascode.tekton.dev/event-type": "pull_request",
-				"kueue.x-k8s.io/priority-class":         "pull-request",
-			},
-			expectedAnnotations: nil,
-			expectErr:           false,
-		},
-		{
-			name: "complex priority expression - test event",
-			expressions: []string{
-				complexPriorityExpression,
-			},
-			initialLabels: map[string]string{
-				"pac.test.appstudio.openshift.io/event-type": "push",
-			},
-			initialAnnotations: nil,
-			expectedLabels: map[string]string{
-				"pac.test.appstudio.openshift.io/event-type": "push",
-				"kueue.x-k8s.io/priority-class":              "push",
-			},
-			expectedAnnotations: nil,
-			expectErr:           false,
-		},
-		{
-			name: "complex priority expression - release namespace",
-			expressions: []string{
-				complexPriorityExpression,
-			},
-			namespace:          "rhtap-releng-tenant",
-			initialLabels:      nil,
-			initialAnnotations: nil,
-			expectedLabels: map[string]string{
-				"kueue.x-k8s.io/priority-class": "release",
-			},
-			expectedAnnotations: nil,
-			expectErr:           false,
-		},
-		{
-			name: "complex priority expression - dependency update namespace",
-			expressions: []string{
-				complexPriorityExpression,
-			},
-			namespace:          "mintmaker",
-			initialLabels:      nil,
-			initialAnnotations: nil,
-			expectedLabels: map[string]string{
-				"kueue.x-k8s.io/priority-class": "dependency-update",
-			},
-			expectedAnnotations: nil,
-			expectErr:           false,
-		},
-		{
-			name: "complex priority expression - default fallback",
-			expressions: []string{
-				complexPriorityExpression,
-			},
-			initialLabels:      nil,
-			initialAnnotations: nil,
-			expectedLabels: map[string]string{
-				"kueue.x-k8s.io/priority-class": "default",
-			},
-			expectedAnnotations: nil,
-			expectErr:           false,
-		},
-		{
-			name: "build-platforms parameter mapping to resource requests",
+			name: "config.yaml build-platforms expression - with parameters",
 			expressions: []string{
 				buildPlatformsExpression,
 			},
@@ -438,50 +450,230 @@ func TestCELMutator_Mutate(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name: "build-platforms parameter missing - returns empty array",
+			name: "config.yaml build-platforms expression - no parameters",
 			expressions: []string{
 				buildPlatformsExpression,
 			},
 			initialLabels:       nil,
 			initialAnnotations:  nil,
-			initialParams:       nil, // No parameters - should return empty array
+			initialParams:       nil,
 			expectedLabels:      nil,
 			expectedAnnotations: nil,
 			expectErr:           false,
 		},
 		{
-			name: "multiple expressions with build-platforms and priority",
+			name: "config.yaml old-style platforms expression - with pipeline spec",
 			expressions: []string{
-				`priority("high")`,
-				`annotation("build-tool", "tekton")`,
-				`label("team", "platform")`,
-				buildPlatformsExpression,
+				oldStylePlatformsExpression,
 			},
 			initialLabels:      nil,
 			initialAnnotations: nil,
-			initialParams:      getBuildPlatformsParamsSmall(),
-			expectedLabels: map[string]string{
-				"kueue.x-k8s.io/priority-class": "high",
-				"team":                          "platform",
+			initialParams:      nil,
+			pipelineSpec: &tekv1.PipelineSpec{
+				Tasks: getPipelineTasksWithPlatforms(),
 			},
+			expectedLabels: nil,
 			expectedAnnotations: map[string]string{
-				"build-tool": "tekton",
 				"kueue.konflux-ci.dev/requests-linux-arm64": "1",
 				"kueue.konflux-ci.dev/requests-linux-amd64": "1",
+				"kueue.konflux-ci.dev/requests-linux-s390x": "1",
 			},
 			expectErr: false,
 		},
 		{
-			name: "accessing parameter with invalid name - should fail",
+			name: "config.yaml old-style platforms expression - no pipeline spec",
 			expressions: []string{
-				"annotation('test', pipelineRun.doesNotExist)",
+				oldStylePlatformsExpression,
 			},
 			initialLabels:       nil,
 			initialAnnotations:  nil,
-			initialParams:       nil, // No parameters - should return empty array
+			initialParams:       nil,
+			pipelineSpec:        nil,
 			expectedLabels:      nil,
 			expectedAnnotations: nil,
-			expectErr:           true,
+			expectErr:           false,
+		},
+		{
+			name: "config.yaml old-style platforms expression - pipeline spec without platforms",
+			expressions: []string{
+				oldStylePlatformsExpression,
+			},
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			initialParams:      nil,
+			pipelineSpec: &tekv1.PipelineSpec{
+				Tasks: getPipelineTasksWithoutPlatforms(),
+			},
+			expectedLabels:      nil,
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "config.yaml priority expression - pac push event",
+			expressions: []string{
+				complexPriorityExpression,
+			},
+			initialLabels: map[string]string{
+				"pipelinesascode.tekton.dev/event-type": "push",
+			},
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"pipelinesascode.tekton.dev/event-type": "push",
+				"kueue.x-k8s.io/priority-class":         "konflux-post-merge-build",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "config.yaml priority expression - pac pull request event",
+			expressions: []string{
+				complexPriorityExpression,
+			},
+			initialLabels: map[string]string{
+				"pipelinesascode.tekton.dev/event-type": "pull_request",
+			},
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"pipelinesascode.tekton.dev/event-type": "pull_request",
+				"kueue.x-k8s.io/priority-class":         "konflux-pre-merge-build",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "config.yaml priority expression - pac test push event",
+			expressions: []string{
+				complexPriorityExpression,
+			},
+			initialLabels: map[string]string{
+				"pac.test.appstudio.openshift.io/event-type": "push",
+			},
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"pac.test.appstudio.openshift.io/event-type": "push",
+				"kueue.x-k8s.io/priority-class":              "konflux-post-merge-test",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "config.yaml priority expression - pac test pull request event",
+			expressions: []string{
+				complexPriorityExpression,
+			},
+			initialLabels: map[string]string{
+				"pac.test.appstudio.openshift.io/event-type": "pull_request",
+			},
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"pac.test.appstudio.openshift.io/event-type": "pull_request",
+				"kueue.x-k8s.io/priority-class":              "konflux-pre-merge-test",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "config.yaml priority expression - managed release",
+			expressions: []string{
+				complexPriorityExpression,
+			},
+			initialLabels: map[string]string{
+				"appstudio.openshift.io/service":        "release",
+				"pipelines.appstudio.openshift.io/type": "managed",
+			},
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"appstudio.openshift.io/service":        "release",
+				"pipelines.appstudio.openshift.io/type": "managed",
+				"kueue.x-k8s.io/priority-class":         "konflux-release",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "config.yaml priority expression - tenant release",
+			expressions: []string{
+				complexPriorityExpression,
+			},
+			initialLabels: map[string]string{
+				"appstudio.openshift.io/service":        "release",
+				"pipelines.appstudio.openshift.io/type": "tenant",
+			},
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"appstudio.openshift.io/service":        "release",
+				"pipelines.appstudio.openshift.io/type": "tenant",
+				"kueue.x-k8s.io/priority-class":         "konflux-tenant-release",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "config.yaml priority expression - mintmaker namespace",
+			expressions: []string{
+				complexPriorityExpression,
+			},
+			namespace:          "mintmaker",
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"kueue.x-k8s.io/priority-class": "konflux-dependency-update",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "config.yaml priority expression - default fallback",
+			expressions: []string{
+				complexPriorityExpression,
+			},
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"kueue.x-k8s.io/priority-class": "konflux-default",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "config.yaml priority expression - release service but not managed/tenant",
+			expressions: []string{
+				complexPriorityExpression,
+			},
+			initialLabels: map[string]string{
+				"appstudio.openshift.io/service":        "release",
+				"pipelines.appstudio.openshift.io/type": "other",
+			},
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"appstudio.openshift.io/service":        "release",
+				"pipelines.appstudio.openshift.io/type": "other",
+				"kueue.x-k8s.io/priority-class":         "konflux-default",
+			},
+			expectedAnnotations: nil,
+			expectErr:           false,
+		},
+		{
+			name: "config.yaml combined expressions - all three",
+			expressions: []string{
+				buildPlatformsExpression,
+				oldStylePlatformsExpression,
+				complexPriorityExpression,
+			},
+			initialLabels: map[string]string{
+				"pipelinesascode.tekton.dev/event-type": "push",
+			},
+			initialAnnotations: nil,
+			initialParams:      getBuildPlatformsParamsSmall(),
+			expectedLabels: map[string]string{
+				"pipelinesascode.tekton.dev/event-type": "push",
+				"kueue.x-k8s.io/priority-class":         "konflux-post-merge-build",
+			},
+			expectedAnnotations: map[string]string{
+				"kueue.konflux-ci.dev/requests-linux-arm64": "1",
+				"kueue.konflux-ci.dev/requests-linux-amd64": "1",
+			},
+			expectErr: false,
 		},
 	}
 
@@ -509,6 +701,11 @@ func TestCELMutator_Mutate(t *testing.T) {
 					},
 					Params: tt.initialParams,
 				},
+			}
+
+			// Add pipeline spec if provided
+			if tt.pipelineSpec != nil {
+				pipelineRun.Spec.PipelineSpec = tt.pipelineSpec
 			}
 
 			// Compile programs and create mutator
