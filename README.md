@@ -308,18 +308,27 @@ In addition, the tekton-kueue webhook server exposes custom Prometheus metrics f
 
 | Metric Name | Type | Description | Labels |
 |-------------|------|-------------|--------|
-| `tekton_kueue_cel_evaluation_failures_total` | Counter | Total number of CEL evaluation failures in the webhook | None |
+| `tekton_kueue_cel_evaluations_total` | Counter | Total number of CEL evaluations in the webhook | `result` (success, failure) |
 
 ### Metrics Details
 
-#### `tekton_kueue_cel_evaluation_failures_total`
+#### `tekton_kueue_cel_evaluations_total`
 
 - **Type**: Counter
-- **Purpose**: Tracks the total number of CEL expression evaluation failures that occur during PipelineRun mutation processing
-- **When incremented**: Each time a CEL expression fails to evaluate during webhook processing
+- **Purpose**: Tracks the total number of CEL expression evaluations during PipelineRun mutation processing
+- **Labels**: 
+  - `result`: The outcome of the CEL evaluation
+    - `success`: CEL expression evaluated successfully
+    - `failure`: CEL expression failed to evaluate
+- **When incremented**: 
+  - Every time CEL expressions are evaluated during webhook processing
+  - Increments with `result="success"` for successful evaluations
+  - Increments with `result="failure"` for failed evaluations
 - **Use cases**: 
-  - Monitor the health of CEL expressions in your configuration
+  - Monitor the overall health and usage of CEL expressions in your configuration
+  - Calculate error rates: `rate(tekton_kueue_cel_evaluations_total{result="failure"}[5m]) / rate(tekton_kueue_cel_evaluations_total[5m])`
   - Alert on unexpected increases in evaluation failures
+  - Track CEL expression usage patterns and performance
 
 ## Project Distribution
 

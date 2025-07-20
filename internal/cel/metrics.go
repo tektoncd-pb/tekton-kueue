@@ -6,22 +6,27 @@ import (
 )
 
 var (
-	// celEvaluationFailuresTotal tracks the total number of CEL evaluation failures
-	celEvaluationFailuresTotal = prometheus.NewCounterVec(
+	// celEvaluationsTotal tracks the total number of CEL evaluations
+	celEvaluationsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "tekton_kueue_cel_evaluation_failures_total",
-			Help: "Total number of CEL evaluation failures",
+			Name: "tekton_kueue_cel_evaluations_total",
+			Help: "Total number of CEL evaluations",
 		},
-		[]string{},
+		[]string{"result"}, // result can be "success" or "failure"
 	)
 )
 
 func init() {
-	// Register the metric with controller-runtime's global registry
-	metrics.Registry.MustRegister(celEvaluationFailuresTotal)
+	// Register the metrics with controller-runtime's global registry
+	metrics.Registry.MustRegister(celEvaluationsTotal)
 }
 
 // RecordEvaluationFailure increments the counter for CEL evaluation failures
 func RecordEvaluationFailure() {
-	celEvaluationFailuresTotal.WithLabelValues().Inc()
+	celEvaluationsTotal.WithLabelValues("failure").Inc()
+}
+
+// RecordEvaluationSuccess increments the counter for successful CEL evaluations
+func RecordEvaluationSuccess() {
+	celEvaluationsTotal.WithLabelValues("success").Inc()
 }
