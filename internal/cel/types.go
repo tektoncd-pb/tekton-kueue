@@ -3,6 +3,7 @@ package cel
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 )
 
 // MutationType represents the type of mutation to perform
@@ -12,16 +13,12 @@ type MutationType string
 const (
 	MutationTypeAnnotation MutationType = "annotation"
 	MutationTypeLabel      MutationType = "label"
+	MutationTypeResource   MutationType = "resource"
 )
 
 // IsValid checks if the mutation type is valid
 func (mt MutationType) IsValid() bool {
-	switch mt {
-	case MutationTypeAnnotation, MutationTypeLabel:
-		return true
-	default:
-		return false
-	}
+	return slices.Contains(ValidTypes(), mt)
 }
 
 // String returns the string representation of the mutation type
@@ -31,7 +28,7 @@ func (mt MutationType) String() string {
 
 // ValidTypes returns all valid mutation types
 func ValidTypes() []MutationType {
-	return []MutationType{MutationTypeAnnotation, MutationTypeLabel}
+	return []MutationType{MutationTypeAnnotation, MutationTypeLabel, MutationTypeResource}
 }
 
 // UnmarshalJSON implements json.Unmarshaler interface with validation

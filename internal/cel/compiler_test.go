@@ -1,6 +1,7 @@
 package cel
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -30,6 +31,7 @@ func TestCompileCELPrograms_TypeSafety(t *testing.T) {
 			expressions: []string{
 				`annotation("test-key", "test-value")`,
 				`label("env", "production")`,
+				`resource("example.com/cpu", 1000)`,
 				`[annotation("key1", "value1"), label("key2", "value2")]`,
 				`priority("high")`,
 			},
@@ -68,6 +70,27 @@ func TestCompileCELPrograms_TypeSafety(t *testing.T) {
 			name: "type error - wrong argument type",
 			expressions: []string{
 				`annotation(123, "test")`, // first argument should be string
+			},
+			expectErr: true,
+		},
+		{
+			name: "type error - resource wrong first arg",
+			expressions: []string{
+				`resource(123, 456)`, // first argument should be string
+			},
+			expectErr: true,
+		},
+		{
+			name: "type error - resource wrong second arg",
+			expressions: []string{
+				`resource("valid-key", "not-an-int")`, // second argument should be int
+			},
+			expectErr: true,
+		},
+		{
+			name: "type error - resource missing arguments",
+			expressions: []string{
+				`resource("test")`, // missing second argument
 			},
 			expectErr: true,
 		},
@@ -133,6 +156,21 @@ func TestValidateExpressionReturnType_ValidCases(t *testing.T) {
 			name:        "valid priority in list",
 			expression:  `[priority("medium"), annotation("queue", "default")]`,
 			description: "Returns list<map<string, any>> with priority and annotation",
+		},
+		{
+			name:        "valid single resource",
+			expression:  `resource("example.com/cpu", 500)`,
+			description: "Returns map<string, any> representing resource MutationRequest",
+		},
+		{
+			name:        "valid resource list",
+			expression:  `[resource("aws-vm-x", 1000), resource("aws-vm-y", 2048)]`,
+			description: "Returns list<map<string, any>> representing []MutationRequest with resources",
+		},
+		{
+			name:        "valid mixed list with resource",
+			expression:  `[annotation("key1", "value1"), label("key2", "value2"), resource("aws-vm-x", 500)]`,
+			description: "Returns list<map<string, any>> with mixed mutation types including resource",
 		},
 	}
 
@@ -523,4 +561,170 @@ func TestValidationFunctions(t *testing.T) {
 			ContainSubstring("maximum allowed is 262144 bytes"),
 		))
 	})
+}
+
+func TestResourceFunction_ValidCases(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a CEL environment for testing
+	env, err := createCELEnvironment()
+	g.Expect(err).NotTo(HaveOccurred())
+
+	tests := []struct {
+		name       string
+		expression string
+		expected   map[string]interface{}
+	}{
+		{
+			name:       "valid resource with positive int",
+			expression: `resource("aws-vm-x", 1000)`,
+			expected: map[string]interface{}{
+				"type":  "resource",
+				"key":   "kueue.konflux-ci.dev/requests-aws-vm-x",
+				"value": "1000",
+			},
+		},
+		{
+			name:       "valid resource with zero value",
+			expression: `resource("aws-vm-y", 0)`,
+			expected: map[string]interface{}{
+				"type":  "resource",
+				"key":   "kueue.konflux-ci.dev/requests-aws-vm-y",
+				"value": "0",
+			},
+		},
+		{
+			name:       "valid resource with simple key",
+			expression: `resource("ibm-vm-z", 2000)`,
+			expected: map[string]interface{}{
+				"type":  "resource",
+				"key":   "kueue.konflux-ci.dev/requests-ibm-vm-z",
+				"value": "2000",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			// Compile the expression
+			ast, issues := env.Compile(tt.expression)
+			g.Expect(issues.Err()).NotTo(HaveOccurred(), "Expression should compile successfully")
+
+			// Create program and evaluate
+			program, err := env.Program(ast)
+			g.Expect(err).NotTo(HaveOccurred(), "Program creation should succeed")
+
+			// Evaluate the expression
+			result, _, err := program.Eval(map[string]interface{}{})
+
+			g.Expect(err).NotTo(HaveOccurred(), "Expected evaluation to succeed")
+			g.Expect(result).NotTo(BeNil(), "Expected valid result")
+
+			// Verify the result structure
+			resultMap, ok := result.Value().(map[string]interface{})
+			g.Expect(ok).To(BeTrue(), "Result should be a map")
+			g.Expect(resultMap).To(Equal(tt.expected), "Result should match expected structure")
+		})
+	}
+}
+
+func TestResourceFunction_ErrorCases(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a CEL environment for testing
+	env, err := createCELEnvironment()
+	g.Expect(err).NotTo(HaveOccurred())
+
+	tests := []struct {
+		name       string
+		expression string
+		errorMsg   string
+	}{
+		{
+			name:       "invalid resource with negative value",
+			expression: `resource("aws-vm-x", -500)`,
+			errorMsg:   "resource value must be positive (>= 0), got -500",
+		},
+		{
+			name:       "invalid resource with empty key",
+			expression: `resource("", 100)`,
+			errorMsg:   "resource key cannot be empty",
+		},
+		{
+			name:       "invalid resource key - starts with dash",
+			expression: `resource("-invalid", 100)`,
+			errorMsg:   "resource key validation failed",
+		},
+		{
+			name:       "invalid resource key - ends with dash",
+			expression: `resource("invalid-", 100)`,
+			errorMsg:   "resource key validation failed",
+		},
+		{
+			name:       "invalid resource key - multiple slashes",
+			expression: `resource("domain.com/path/invalid", 100)`,
+			errorMsg:   "resource key validation failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			// Compile the expression
+			ast, issues := env.Compile(tt.expression)
+			g.Expect(issues.Err()).NotTo(HaveOccurred(), "Expression should compile successfully")
+
+			// Create program and evaluate
+			program, err := env.Program(ast)
+			g.Expect(err).NotTo(HaveOccurred(), "Program creation should succeed")
+
+			// Evaluate the expression
+			_, _, err = program.Eval(map[string]interface{}{})
+
+			g.Expect(err).To(HaveOccurred(), "Expected evaluation to fail")
+			g.Expect(err.Error()).To(ContainSubstring(tt.errorMsg), "Error message should contain expected text")
+		})
+	}
+}
+
+func TestResourceFunctionIntegration(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create CEL environment for testing
+	env, err := createCELEnvironment()
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Test resource function in list expressions
+	expressions := []string{
+		`[resource("aws-vm-x", 1000), resource("aws-vm-y", 2048)]`,
+		`[annotation("queue", "default"), resource("ibm-vm-z", 500)]`,
+		`resource("aws-vm-x", 4)`,
+	}
+
+	for i, expression := range expressions {
+		t.Run(fmt.Sprintf("expression_%d", i), func(t *testing.T) {
+			g := NewWithT(t)
+
+			// Compile the expression
+			ast, issues := env.Compile(expression)
+			g.Expect(issues.Err()).NotTo(HaveOccurred(), "Expression should compile successfully")
+
+			// Create program and evaluate
+			program, err := env.Program(ast)
+			g.Expect(err).NotTo(HaveOccurred(), "Program creation should succeed")
+
+			// Evaluate the expression
+			result, _, err := program.Eval(map[string]interface{}{})
+			g.Expect(err).NotTo(HaveOccurred(), "Program should evaluate successfully")
+			g.Expect(result).NotTo(BeNil(), "Program should return a valid result")
+		})
+	}
+
+	// Also test the compilation through the main CompileCELPrograms function
+	programs, err := CompileCELPrograms(expressions)
+	g.Expect(err).NotTo(HaveOccurred(), "All expressions should compile successfully")
+	g.Expect(programs).To(HaveLen(3), "Should have compiled 3 programs")
 }
