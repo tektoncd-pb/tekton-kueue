@@ -56,6 +56,7 @@ func createCELEnvironment() (*cel.Env, error) {
 		// Add type-safe functions for creating MutationRequests
 		createMutationFunction("annotation", MutationTypeAnnotation, mutationRequestType),
 		createMutationFunction("label", MutationTypeLabel, mutationRequestType),
+		createResourceMutationFunction("resource", MutationTypeResource, mutationRequestType),
 		createPriorityMutationFunction("priority", mutationRequestType),
 		// Add string manipulation functions
 		createReplaceFunction("replace"),
@@ -120,6 +121,65 @@ func createMutationFunction(name string, mutationType MutationType, returnType *
 				mutationMap := map[string]interface{}{
 					"type":  string(mutationType),
 					"key":   key,
+					"value": value,
+				}
+
+				return types.NewStringInterfaceMap(types.DefaultTypeAdapter, mutationMap)
+			}),
+		),
+	)
+}
+
+// createResourceMutationFunction creates a CEL function for resource mutations that accepts string key and int value
+func createResourceMutationFunction(name string, mutationType MutationType, returnType *cel.Type) cel.EnvOption {
+	return cel.Function(
+		name,
+		cel.Overload(
+			name+"_string_int_to_mutation",
+			[]*cel.Type{cel.StringType, cel.IntType},
+			returnType,
+			cel.BinaryBinding(func(lhs, rhs ref.Val) ref.Val {
+				key, keyOk := lhs.Value().(string)
+
+				if !keyOk {
+					return types.NewErr("%s function requires string key argument", name)
+				}
+
+				if key == "" {
+					return types.NewErr("%s key cannot be empty", name)
+				}
+
+				intValue, intValueOk := rhs.Value().(int64)
+
+				if !intValueOk {
+					return types.NewErr("%s function requires int value argument", name)
+				}
+
+				// Validate that the value is positive (non-negative)
+				if intValue < 0 {
+					return types.NewErr("%s value must be positive (>= 0), got %d", name, intValue)
+				}
+
+				// Convert int value to string for storage
+				value := fmt.Sprintf("%d", intValue)
+
+				// Validate key using annotation validation since resource mutations create annotations
+				err := validateKey(key, "resource annotation")
+				if err != nil {
+					return types.NewErr("%s key validation failed: %v", name, err)
+				}
+
+				// Validate the converted value using annotation validation
+				err = validateAnnotationValue(value)
+				if err != nil {
+					return types.NewErr("%s value validation failed: %v", name, err)
+				}
+
+				// Create strongly-typed MutationRequest structure as map
+				// Note: This mutation type creates annotations but with special summing behavior for duplicates
+				mutationMap := map[string]interface{}{
+					"type":  string(mutationType),
+					"key":   "kueue.konflux-ci.dev/requests-" + key,
 					"value": value,
 				}
 

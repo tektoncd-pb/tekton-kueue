@@ -675,6 +675,91 @@ func TestCELMutator_Mutate(t *testing.T) {
 			},
 			expectErr: false,
 		},
+		{
+			name: "single resource mutation - new annotation",
+			expressions: []string{
+				`resource("aws-vm-x", 1000)`,
+			},
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			expectedLabels:     nil,
+			expectedAnnotations: map[string]string{
+				"kueue.konflux-ci.dev/requests-aws-vm-x": "1000",
+			},
+			expectErr: false,
+		},
+		{
+			name: "resource mutation - sum with existing annotation",
+			expressions: []string{
+				`resource("aws-vm-y", 2048)`,
+			},
+			initialLabels: nil,
+			initialAnnotations: map[string]string{
+				"kueue.konflux-ci.dev/requests-aws-vm-y": "1024",
+			},
+			expectedLabels: nil,
+			expectedAnnotations: map[string]string{
+				"kueue.konflux-ci.dev/requests-aws-vm-y": "3072", // 1024 + 2048
+			},
+			expectErr: false,
+		},
+		{
+			name: "resource mutation - invalid existing value",
+			expressions: []string{
+				`resource("ibm-vm-z", 500)`,
+			},
+			initialLabels: nil,
+			initialAnnotations: map[string]string{
+				"kueue.konflux-ci.dev/requests-ibm-vm-z": "invalid",
+			},
+			expectedLabels:      nil,
+			expectedAnnotations: nil,
+			expectErr:           true,
+			errMsg:              "failed to parse existing resource value \"invalid\" as integer",
+		},
+		{
+			name: "multiple resource mutations - same key summing",
+			expressions: []string{
+				`resource("aws-vm-x", 2)`,
+				`resource("aws-vm-x", 4)`,
+			},
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			expectedLabels:     nil,
+			expectedAnnotations: map[string]string{
+				"kueue.konflux-ci.dev/requests-aws-vm-x": "6", // 2 + 4
+			},
+			expectErr: false,
+		},
+		{
+			name: "mixed mutations with resources",
+			expressions: []string{
+				`[annotation("tekton.dev/pipeline", "test"), label("env", "prod"), resource("aws-vm-y", 1000)]`,
+			},
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			expectedLabels: map[string]string{
+				"env": "prod",
+			},
+			expectedAnnotations: map[string]string{
+				"tekton.dev/pipeline":                    "test",
+				"kueue.konflux-ci.dev/requests-aws-vm-y": "1000",
+			},
+			expectErr: false,
+		},
+		{
+			name: "resource mutation - zero value",
+			expressions: []string{
+				`resource("ibm-vm-z", 0)`,
+			},
+			initialLabels:      nil,
+			initialAnnotations: nil,
+			expectedLabels:     nil,
+			expectedAnnotations: map[string]string{
+				"kueue.konflux-ci.dev/requests-ibm-vm-z": "0",
+			},
+			expectErr: false,
+		},
 	}
 
 	for _, tt := range tests {

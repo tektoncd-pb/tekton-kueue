@@ -15,6 +15,7 @@ func TestMutationType_IsValid(t *testing.T) {
 	}{
 		{"valid annotation", MutationTypeAnnotation, true},
 		{"valid label", MutationTypeLabel, true},
+		{"valid resource", MutationTypeResource, true},
 		{"invalid type", MutationType("invalid"), false},
 		{"empty type", MutationType(""), false},
 	}
@@ -46,6 +47,12 @@ func TestMutationType_JSON(t *testing.T) {
 			input:     `"label"`,
 			expectErr: false,
 			expected:  MutationTypeLabel,
+		},
+		{
+			name:      "valid resource",
+			input:     `"resource"`,
+			expectErr: false,
+			expected:  MutationTypeResource,
 		},
 		{
 			name:      "invalid type",
@@ -93,6 +100,15 @@ func TestMutationRequest_Validate(t *testing.T) {
 				Type:  MutationTypeLabel,
 				Key:   "env",
 				Value: "production",
+			},
+			expectErr: false,
+		},
+		{
+			name: "valid resource",
+			request: MutationRequest{
+				Type:  MutationTypeResource,
+				Key:   "example.com/resource-key",
+				Value: "42",
 			},
 			expectErr: false,
 		},
@@ -167,6 +183,15 @@ func TestMutationRequest_Usage(t *testing.T) {
 
 	err = label.Validate()
 	g.Expect(err).NotTo(HaveOccurred(), "Valid label should not produce error")
+
+	resource := MutationRequest{
+		Type:  MutationTypeResource,
+		Key:   "kueue.x-k8s.io/cpu-limit",
+		Value: "1000",
+	}
+
+	err = resource.Validate()
+	g.Expect(err).NotTo(HaveOccurred(), "Valid resource should not produce error")
 
 	// Test JSON marshaling/unmarshaling
 	data, err := json.Marshal(annotation)
