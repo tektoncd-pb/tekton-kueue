@@ -48,18 +48,21 @@ func (cp *CompiledProgram) Evaluate(pipelineRun *tekv1.PipelineRun) ([]*Mutation
 	// Execute the program
 	out, _, err := cp.program.Eval(vars)
 	if err != nil {
+		RecordEvaluationFailure()
 		return nil, fmt.Errorf("failed to evaluate CEL expression %q: %w", cp.expression, err)
 	}
 
 	// Convert the result to []MutationRequest with validation
 	mutations, err := convertToMutationRequests(out)
 	if err != nil {
+		RecordEvaluationFailure()
 		return nil, fmt.Errorf("failed to convert result to MutationRequests for expression %q: %w", cp.expression, err)
 	}
 
 	// Validate all mutations
 	for i, mutation := range mutations {
 		if err := mutation.Validate(); err != nil {
+			RecordEvaluationFailure()
 			return nil, fmt.Errorf("invalid mutation at index %d for expression %q: %w", i, cp.expression, err)
 		}
 	}
