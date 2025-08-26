@@ -78,7 +78,6 @@ func (m *CELMutator) evaluate(pipelineRun *tekv1.PipelineRun) ([]*MutationReques
 	for _, program := range m.programs {
 		mutations, err := program.Evaluate(pipelineRun)
 		if err != nil {
-			RecordEvaluationFailure()
 			return nil, err
 		}
 		allMutations = append(allMutations, mutations...)
