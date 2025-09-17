@@ -7,15 +7,15 @@ toolchain go1.24.4
 godebug default=go1.23
 
 require (
-	github.com/google/cel-go v0.23.1
+	github.com/google/cel-go v0.24.1
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
 	github.com/prometheus/client_golang v1.22.0
-	github.com/tektoncd/pipeline v0.68.0
+	github.com/tektoncd/pipeline v1.0.0
 	k8s.io/api v0.32.5
 	k8s.io/apimachinery v0.32.5
 	k8s.io/client-go v0.32.5
-	knative.dev/pkg v0.0.0-20250219013713-9e265611c097
+	knative.dev/pkg v0.0.0-20250415155312-ed3e2158b883
 	sigs.k8s.io/controller-runtime v0.20.4
 	sigs.k8s.io/kueue v0.11.6
 	sigs.k8s.io/yaml v1.4.0
@@ -106,7 +106,7 @@ require (
 	golang.org/x/time v0.11.0 // indirect
 	golang.org/x/tools v0.33.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
-	google.golang.org/api v0.214.0 // indirect
+	google.golang.org/api v0.217.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250603155806-513f23925822 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822 // indirect
 	google.golang.org/grpc v1.73.0 // indirect
