@@ -1,0 +1,12 @@
+name: build and release tekton kueue
+on:
+  workflow_dispatch: { }
+  push:
+    branches:
+      - main
+      - release-*
+
+jobs:
+  build-and-release-tekton-kueue:
+    uses: ./.github/workflows/build-and-release.yaml
+
