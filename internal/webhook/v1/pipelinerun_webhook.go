@@ -21,8 +21,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -35,7 +37,21 @@ const QueueLabel = "kueue.x-k8s.io/queue-name"
 func SetupPipelineRunWebhookWithManager(mgr ctrl.Manager, defaulter admission.CustomDefaulter) error {
 	return ctrl.NewWebhookManagedBy(mgr).For(&tekv1.PipelineRun{}).
 		WithDefaulter(defaulter).
+		WithLogConstructor(logConstructor).
 		Complete()
+}
+
+func logConstructor(base logr.Logger, req *admission.Request) logr.Logger {
+	if req == nil {
+		return base
+	}
+	if a, err := meta.Accessor(req.Object); err == nil {
+		if a.GetName() == "" {
+			// use the generate name only if the name is unset
+			return base.WithValues("generateName", a.GetGenerateName())
+		}
+	}
+	return base
 }
 
 type PipelineRunMutator interface {
