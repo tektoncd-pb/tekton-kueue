@@ -17,45 +17,80 @@ limitations under the License.
 package v1
 
 import (
+	"context"
+	"testing"
+
+	"github.com/konflux-ci/tekton-queue/internal/common"
+	"github.com/konflux-ci/tekton-queue/internal/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
-
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
-	// TODO (user): Add any additional imports if needed
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
+
+func TestV1Webhook(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "V1 Webhook Suite")
+}
 
 var _ = Describe("PipelineRun Webhook", func() {
 	var (
-		obj       *tektondevv1.PipelineRun
-		oldObj    *tektondevv1.PipelineRun
-		defaulter pipelineRunCustomDefaulter
+		defaulter webhook.CustomDefaulter
+		plr       *tektondevv1.PipelineRun
 	)
 
-	BeforeEach(func() {
-		obj = &tektondevv1.PipelineRun{}
-		oldObj = &tektondevv1.PipelineRun{}
-		defaulter = pipelineRunCustomDefaulter{}
-		Expect(defaulter).NotTo(BeNil(), "Expected defaulter to be initialized")
-		Expect(oldObj).NotTo(BeNil(), "Expected oldObj to be initialized")
-		Expect(obj).NotTo(BeNil(), "Expected obj to be initialized")
-		// TODO (user): Add any setup logic common to all tests
-	})
-
-	AfterEach(func() {
-		// TODO (user): Add any teardown logic common to all tests
-	})
-
-	Context("When creating PipelineRun under Defaulting Webhook", func() {
-		It("Should report an error when serialization errors occur", func(ctx SpecContext) {
-			obj.Spec.Params = tektondevv1.Params{
-				{
-					Name: "build-platforms",
-					// intentionally leave off a value
+	BeforeEach(func(ctx context.Context) {
+		plr = &tektondevv1.PipelineRun{
+			Spec: tektondevv1.PipelineRunSpec{
+				PipelineRef: &tektondevv1.PipelineRef{
+					Name: "test-pipeline",
 				},
-			}
+			},
+		}
+	})
 
-			Expect(defaulter.Default(ctx, obj)).Error().To(Satisfy(errors.IsBadRequest))
+	Describe("Default", func() {
+		Context("when MultiKueueOverride is true", func() {
+			It("should set the managedBy", func(ctx context.Context) {
+				cfg := &config.Config{
+					QueueName:          "test-queue",
+					MultiKueueOverride: true,
+				}
+				var err error
+				defaulter, err = NewCustomDefaulter(cfg, []PipelineRunMutator{})
+				Expect(err).NotTo(HaveOccurred())
+				err = defaulter.Default(ctx, plr)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(*plr.Spec.ManagedBy).To(Equal(common.ManagedByMultiKueueLabel))
+				Expect(plr.Spec.Status).To(Equal(tektondevv1.PipelineRunSpecStatus(tektondevv1.PipelineRunSpecStatusPending)))
+			})
+		})
+
+		Context("when MultiKueueOverride is false", func() {
+			It("should set the status to Pending", func(ctx context.Context) {
+				cfg := &config.Config{
+					QueueName:          "test-queue",
+					MultiKueueOverride: false,
+				}
+				var err error
+				defaulter, err = NewCustomDefaulter(cfg, []PipelineRunMutator{})
+				Expect(err).NotTo(HaveOccurred())
+				err = defaulter.Default(ctx, plr)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(plr.Spec.Status).To(Equal(tektondevv1.PipelineRunSpecStatus(tektondevv1.PipelineRunSpecStatusPending)))
+			})
+		})
+
+		It("should set the queue name", func(ctx context.Context) {
+			cfg := &config.Config{
+				QueueName: "test-queue",
+			}
+			var err error
+			defaulter, err = NewCustomDefaulter(cfg, []PipelineRunMutator{})
+			Expect(err).NotTo(HaveOccurred())
+			err = defaulter.Default(ctx, plr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(plr.Labels[common.QueueLabel]).To(Equal("test-queue"))
 		})
 	})
 })
