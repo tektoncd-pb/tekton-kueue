@@ -13,9 +13,4 @@ export KUBECONFIG=${KUBECONFIG:-/tmp/multikueue.kubeconfig}
 
 #Setup MultiKueue Environment
 source $ROOT/hack/01-setup-multikueue.sh
-
-echo $KUBECONFIG
-
-kubectl config get-contexts
-set -x
-ginkgo run $ROOT/test/multikueue
+ginkgo -v run $ROOT/test/multikueue

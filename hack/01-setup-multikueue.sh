@@ -75,7 +75,7 @@ setup_hub_cluster() {
 # Function to create a kubeconfig for a worker
 create_worker_kubeconfig() {
     local worker_name=$1
-    local kubeconfig_out="${worker_name}.kubeconfig"
+    local kubeconfig_out="$TEMP_DIR/${worker_name}.kubeconfig"
     local multikueue_sa="multikueue-sa"
     local namespace="kueue-system"
 
@@ -178,12 +178,8 @@ setup_spoke_cluster() {
   create_cluster $cluserName
 
   #Apply Worker Setup
-  kubectl config get-contexts
   kubectl apply -f $ROOT/config/samples/kueue/kueue-resources.yaml
-
   create_worker_kubeconfig $cluserName
-
-
 }
 
 function add_spoke_to_hub() {
