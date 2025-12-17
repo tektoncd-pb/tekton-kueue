@@ -17,9 +17,9 @@ limitations under the License.
 */
 
 type Config struct {
-	QueueName          string `json:"queueName,omitempty"`
-	MultiKueueOverride bool   `json:"multiKueueOverride,omitempty"`
-	CEL                CEL    `json:"cel,omitempty"`
+	QueueName          string `json:"queueName,omitempty" yaml:"queueName,omitempty"`
+	MultiKueueOverride bool   `json:"multiKueueOverride,omitempty" yaml:"multiKueueOverride,omitempty"`
+	CEL                CEL    `json:"cel,omitempty" yaml:"cel,omitempty"`
 }
 
 type CEL struct {

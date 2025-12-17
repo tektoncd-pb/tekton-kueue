@@ -26,10 +26,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/konflux-ci/tekton-queue/internal/common"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	webhookv1 "github.com/konflux-ci/tekton-queue/internal/webhook/v1"
 	"github.com/konflux-ci/tekton-queue/test/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -567,7 +567,7 @@ var _ = Describe("Manager", Ordered, func() {
 		It("PipelineRun is queued because lack of resources", func(ctx context.Context) {
 			plr = plrTemplate.DeepCopy()
 			plr.Labels = map[string]string{
-				webhookv1.QueueLabel: "blocking-pipelines-queue",
+				common.QueueLabel: "blocking-pipelines-queue",
 			}
 			Eventually(
 				func() error {

@@ -28,7 +28,11 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/konflux-ci/tekton-queue/internal/common"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	outputyaml "sigs.k8s.io/yaml"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -48,8 +52,6 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/konflux-ci/tekton-queue/internal/cel"
-	kueueconfig "github.com/konflux-ci/tekton-queue/internal/config"
 	"github.com/konflux-ci/tekton-queue/internal/controller"
 	webhookv1 "github.com/konflux-ci/tekton-queue/internal/webhook/v1"
 
@@ -259,6 +261,7 @@ func runController(args []string) {
 }
 
 func runWebhook(args []string) {
+	setupLog.Info("starting webhook")
 	fs := flag.NewFlagSet("webhook", flag.ExitOnError)
 	var webhookFlags WebhookFlags
 	webhookFlags.AddFlags(fs)
@@ -281,20 +284,12 @@ func runWebhook(args []string) {
 		setupLog.Error(err, "unable to create manager")
 		os.Exit(1)
 	}
-	cfg, err := loadConfig(webhookFlags.ConfigDir)
-	if err != nil {
+	cfgStore := &webhookv1.ConfigStore{}
+	if err := loadConfig(webhookFlags.ConfigDir, cfgStore); err != nil {
 		setupLog.Error(err, "unable to load webhook configuration")
 		os.Exit(1)
 	}
-
-	programs, err := cel.CompileCELPrograms(cfg.CEL.Expressions)
-	if err != nil {
-		setupLog.Error(err, "unable to compile CEL programs")
-		os.Exit(1)
-	}
-	mutator := cel.NewCELMutator(programs)
-
-	customDefaulter, err := webhookv1.NewCustomDefaulter(cfg, []webhookv1.PipelineRunMutator{mutator})
+	customDefaulter, err := webhookv1.NewCustomDefaulter(cfgStore)
 
 	if err != nil {
 		setupLog.Error(err, "Unable to create custom defaulter for webhook")
@@ -316,6 +311,7 @@ func runWebhook(args []string) {
 	)
 	addMetricsCertWatcher(mgr, metricsCertWatcher)
 	addReadyAndHealthChecksToMgrOrDie(mgr)
+	addConfigWatcher(mgr, cfgStore)
 
 	setupLog.Info("starting manager")
 	ctx := ctrl.SetupSignalHandler()
@@ -359,22 +355,11 @@ func runMutate(args []string) {
 	}
 
 	// Load config
-	cfg, err := loadConfig(mutateFlags.ConfigDir)
-	if err != nil {
-		setupLog.Error(err, "unable to load configuration")
+	cfgStore := &webhookv1.ConfigStore{}
+	if err := loadConfig(mutateFlags.ConfigDir, cfgStore); err != nil {
 		os.Exit(1)
 	}
-
-	// Compile CEL programs and create mutator
-	programs, err := cel.CompileCELPrograms(cfg.CEL.Expressions)
-	if err != nil {
-		setupLog.Error(err, "unable to compile CEL programs")
-		os.Exit(1)
-	}
-	mutator := cel.NewCELMutator(programs)
-
-	// Create custom defaulter
-	customDefaulter, err := webhookv1.NewCustomDefaulter(cfg, []webhookv1.PipelineRunMutator{mutator})
+	customDefaulter, err := webhookv1.NewCustomDefaulter(cfgStore)
 
 	if err != nil {
 		setupLog.Error(err, "Unable to create custom defaulter")
@@ -549,21 +534,42 @@ func parseFlagsOrDie(fs *flag.FlagSet, args []string) {
 	}
 }
 
-func loadConfig(dir string) (*kueueconfig.Config, error) {
-	setupLog.Info("Loading Kueue config from ", "dir", dir, "file", "config.yaml")
-	if dir == "" {
-		return nil, errors.New("no config directory provided")
+func addConfigWatcher(mgr ctrl.Manager, configStore *webhookv1.ConfigStore) {
+	setupLog.Info("Adding config watcher to manager")
+	namespace, found := os.LookupEnv("POD_NAMESPACE")
+	if !found {
+		setupLog.Error(fmt.Errorf("POD_NAMESPACE env var not set"), "Exiting")
+		os.Exit(1)
+		// ns will be empty string "", which in K8s terms means "all namespaces"
 	}
-	data, err := os.ReadFile(path.Join(dir, "config.yaml"))
+	err := ctrl.NewControllerManagedBy(mgr).
+		For(&corev1.ConfigMap{}).
+		WithEventFilter(predicate.NewPredicateFuncs(func(o client.Object) bool {
+			return o.GetName() == common.ConfigMapName && o.GetNamespace() == namespace
+		})).
+		Complete(&webhookv1.ConfigMapReconciler{Client: mgr.GetClient(), Store: configStore})
+
+	if err != nil {
+		setupLog.Error(err, "Failed to add watcher to config ")
+		os.Exit(1)
+	}
+}
+
+func loadConfig(dir string, cfgStore *webhookv1.ConfigStore) error {
+	// Create custom defaulter
+	setupLog.Info("Loading Kueue config from ", "dir", dir, "file", common.ConfigKey)
+	if dir == "" {
+		return errors.New("no config directory provided")
+	}
+	data, err := os.ReadFile(path.Join(dir, common.ConfigKey))
 	if err != nil {
 		setupLog.Error(err, "Failed to read Kueue config file")
-		return nil, err
+		return err
 	}
-	cfg := &kueueconfig.Config{}
-	if err := yaml.Unmarshal(data, cfg); err != nil {
-		setupLog.Error(err, "Failed to parse Kueue config file")
-		return cfg, err
+	if err = cfgStore.Update(data); err != nil {
+		setupLog.Error(err, "unable to update configuration")
+		return err
 	}
-	setupLog.Info("Loaded Kueue config from ", "dir", dir, "cfg", cfg)
-	return cfg, nil
+	setupLog.Info("Loaded Kueue config from ", "dir", dir, "cfg", cfgStore.GetConfig())
+	return nil
 }

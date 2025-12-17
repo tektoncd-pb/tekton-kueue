@@ -1,19 +1,25 @@
 kind: Kustomization
 images:
-- name: controller
-  newName: konflux-ci/tekton-kueue
-  newTag: latest
+  - name: controller
+    newName: konflux-ci/tekton-kueue
+    newTag: latest
 resources:
-- deployment.yaml
-- manifests.yaml
-- service.yaml
-- default-priority-class.yaml
+  - deployment.yaml
+  - manifests.yaml
+  - service.yaml
+  - default-priority-class.yaml
 
 configurations:
-- kustomizeconfig.yaml
+  - kustomizeconfig.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 
 configMapGenerator:
-- name: config
-  files:
-  - config.yaml
+  - name: config
+    files:
+      - config.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    app.kubernetes.io/part-of: tekton-kueue
+
