@@ -20,40 +20,6 @@ TEMP_DIR="/tmp/tekton-kueue/e2e/multikueue"
 mkdir -p ${TEMP_DIR}
 export KUBECONFIG=${KUBECONFIG:-$TEMP_DIR/multikueue.kubeconfig}
 
-function create_cluster() {
-    cluserName=$1
-    shift
-    if kind get clusters | grep -q "^${cluserName}$"; then
-        echo "  ✅ Cluster $cluserName already exists. Continuing with the next command."
-        kind export kubeconfig --name $cluserName
-        return
-    else
-        echo "Cluster $cluserName does not exist. Halting script or creating it."
-        kind create cluster --name=$cluserName $@
-    fi
-
-    kubectl config use-context kind-$cluserName
-
-    echo "Installing tekton and cert-manager"
-    make tekton cert-manager > /dev/null
-
-    echo "Waiting for cert-manager to be ready..."
-    kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
-
-    echo "Waiting for Tekton Pipelines to be ready..."
-    kubectl wait --for=condition=Available deployment --all -n tekton-pipelines --timeout=300s
-
-    echo "Installing Kueue controller on $cluserName..."
-    kubectl apply --server-side -f ${KUEUE_MANIFEST_URL} > /dev/null
-
-    echo "Waiting for Kueue to be ready..."
-    kubectl wait --for=condition=Available deployment --all -n kueue-system --timeout=300s
-
-    kubectl get po,svc -n kueue-system --show-labels
-
-    echo "Cluster $cluserName is ready"
-
-}
 
 
 
