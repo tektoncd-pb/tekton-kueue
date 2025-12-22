@@ -26,11 +26,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/konflux-ci/tekton-queue/internal/common"
+	"github.com/konflux-ci/tekton-kueue/pkg/common"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/konflux-ci/tekton-queue/test/utils"
+	"github.com/konflux-ci/tekton-kueue/test/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"

@@ -22,7 +22,7 @@ import (
 	"log"
 
 	"github.com/go-logr/logr"
-	"github.com/konflux-ci/tekton-queue/internal/common"
+	"github.com/konflux-ci/tekton-kueue/pkg/common"
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"

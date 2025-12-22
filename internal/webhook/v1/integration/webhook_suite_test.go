@@ -41,7 +41,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	v1 "github.com/konflux-ci/tekton-queue/internal/webhook/v1"
+	v1 "github.com/konflux-ci/tekton-kueue/internal/webhook/v1"
 	// +kubebuilder:scaffold:imports
 )
 

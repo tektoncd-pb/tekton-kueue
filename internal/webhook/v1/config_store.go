@@ -4,8 +4,8 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/konflux-ci/tekton-queue/internal/cel"
-	config "github.com/konflux-ci/tekton-queue/internal/config"
+	"github.com/konflux-ci/tekton-kueue/internal/cel"
+	"github.com/konflux-ci/tekton-kueue/pkg/config"
 	"gopkg.in/yaml.v3"
 )
 

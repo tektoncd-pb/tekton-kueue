@@ -28,7 +28,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/konflux-ci/tekton-queue/internal/common"
+	"github.com/konflux-ci/tekton-kueue/pkg/common"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -52,8 +52,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/konflux-ci/tekton-queue/internal/controller"
-	webhookv1 "github.com/konflux-ci/tekton-queue/internal/webhook/v1"
+	"github.com/konflux-ci/tekton-kueue/internal/controller"
+	webhookv1 "github.com/konflux-ci/tekton-kueue/internal/webhook/v1"
 
 	// +kubebuilder:scaffold:imports
 
