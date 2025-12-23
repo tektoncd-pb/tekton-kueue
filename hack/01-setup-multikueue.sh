@@ -9,12 +9,13 @@ set -o pipefail
 # Number of workers to create, default to 1
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 ROOT="$(dirname "$SCRIPT_DIR")"
+export IMG=$KO_DOCKER_REPO/tekton-kueue:latest
 
 NUM_WORKERS=${1:-1}
 TEKTON_MANIFEST_URL="https://infra.tekton.dev/tekton-releases/pipeline/latest/release.yaml"
 KUEUE_MANIFEST_URL="https://gist.githubusercontent.com/khrm/a83998529449ae0f0e25c264d4e61dd0/raw/bd7933eea4b509996dbe7a4739ff96dd2101b0e3/gistfile0.txt"
 MULTIKUEUE_MANIFEST_URL="https://gist.githubusercontent.com/khrm/4a022f27a97c5f1456cdc05a64885860/raw/ba1b9ae77b55ac3319de207167ab4590eb78bb0a/gistfile0.txt"
-CERT_MANAGER_URL="https://github.com/cert-manager/cert-manager/releases/download/v1.16.3/cert-manager.yaml"
+#CERT_MANAGER_URL="https://github.com/cert-manager/cert-manager/releases/download/v1.16.3/cert-manager.yaml"
 
 TEMP_DIR="/tmp/tekton-kueue/e2e/multikueue"
 mkdir -p ${TEMP_DIR}
@@ -35,23 +36,21 @@ function create_cluster() {
     kubectl config use-context kind-$cluserName
 
     echo "Installing tekton and cert-manager"
-    make tekton cert-manager > /dev/null
+    make tekton cert-manager
 
     echo "Installing Kueue controller on $cluserName..."
-      kubectl apply --server-side -f ${KUEUE_MANIFEST_URL} > /dev/null
+    kubectl apply --server-side -f ${KUEUE_MANIFEST_URL}
 
     echo "Waiting for cert-manager to be ready..."
-    kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=300s > /dev/null
+    kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
 
     echo "Waiting for Tekton Pipelines to be ready..."
-    kubectl wait --for=condition=Available deployment --all -n tekton-pipelines --timeout=300s > /dev/null
+    kubectl wait --for=condition=Available deployment --all -n tekton-pipelines --timeout=300s
 
     echo "Waiting for Kueue to be ready..."
-    kubectl wait --for=condition=Available deployment --all -n kueue-system --timeout=300s > /dev/null
-
+    kubectl wait --for=condition=Available deployment --all -n kueue-system --timeout=300s
 
     echo "Cluster $cluserName is ready"
-
 }
 
 
@@ -62,8 +61,9 @@ setup_hub_cluster() {
   echo "Creating $cluserName cluster..."
   create_cluster $cluserName
 
-  echo "Installing MultiKueue controller on $cluserName..."
-  kubectl apply --server-side --force-conflicts -f ${MULTIKUEUE_MANIFEST_URL}
+  echo "Installing Tekton-Kueue controller on $cluserName..."
+  #kubectl apply --server-side --force-conflicts -f ${MULTIKUEUE_MANIFEST_URL}
+  make docker-build docker-push deploy
 
 
   #Apply MultiKueue Setup
